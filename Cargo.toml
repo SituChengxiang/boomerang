@@ -1,0 +1,11 @@
+[package]
+name = "boomerang"
+version = "0.1.0"
+edition = "2024"
+
+# Cargo.toml 添加依赖
+[dependencies]
+polars = "0.27"
+ndarray = "0.15"
+ndarray-linalg = "0.15"
+plotters = "0.3"

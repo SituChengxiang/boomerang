@@ -1,139 +1,165 @@
-use ndarray::*;
-use ndarray_linalg::*;
 use polars::prelude::*;
-use plotters::prelude::*;
-use std::fs::File;
+use ndarray::{Array2, Array1};
+use ndarray_linalg::{SVD, Solve};
+use std::f64;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 读取 CSV 文件
-    let file = File::open("ps.csv")?;
-    let df = CsvReader::new(file)
+fn read_csv(file_path: &str) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>), Box<dyn std::error::Error>> {
+    let df = CsvReader::from_path(file_path)?
+        .infer_schema(None)
         .has_header(true)
         .finish()?;
 
-    // 检查并处理列名（根据实际 CSV 调整）
-    let columns = df.get_column_names();
-    println!("检测到的列: {:?}", columns);
+    let t_series = df.column("t")?.f64()?;
+    let x_series = df.column("x")?.f64()?;
+    let y_series = df.column("y")?.f64()?;
+    let z_series = df.column("z")?.f64()?;
 
-    // 提取数据列（假设列顺序为 t, x, y, z）
-    let t = df.column("t")?.f64()?;
-    let x = df.column("x")?.f64()?;
-    let y = df.column("y")?.f64()?; // 如果列名不同需要修改
-    let z = df.column("z")?.f64()?;
+    let t: Vec<f64> = t_series.into_iter().collect::<Option<Vec<_>>>().unwrap();
+    let x: Vec<f64> = x_series.into_iter().collect::<Option<Vec<_>>>().unwrap();
+    let y: Vec<f64> = y_series.into_iter().collect::<Option<Vec<_>>>().unwrap();
+    let z: Vec<f64> = z_series.into_iter().collect::<Option<Vec<_>>>().unwrap();
 
-    // 转换为 Vec<f64>
-    let t_data: Vec<f64> = t.into_no_null_iter().collect();
-    let x_data = Array1::from_vec(x.into_no_null_iter().collect());
-    let y_data = Array1::from_vec(y.into_no_null_iter().collect());
-    let z_data = Array1::from_vec(z.into_no_null_iter().collect());
-
-    // 为每个坐标轴执行拟合
-    let (coeff_x, cov_x) = polynomial_fit(&t_data, &x_data, 4)?;
-    let (coeff_y, cov_y) = polynomial_fit(&t_data, &y_data, 4)?;
-    let (coeff_z, cov_z) = polynomial_fit(&t_data, &z_data, 4)?;
-
-    // 打印结果
-    print_equation("x", &coeff_x);
-    print_equation("y", &coeff_y);
-    print_equation("z", &coeff_z);
-
-    // 绘制协方差矩阵
-    plot_matrix(&cov_x, "covariance_x.png")?;
-    plot_matrix(&cov_y, "covariance_y.png")?;
-    plot_matrix(&cov_z, "covariance_z.png")?;
-
-    Ok(())
+    Ok((t, x, y, z))
 }
 
-fn polynomial_fit(
-    t: &[f64],
-    y: &Array1<f64>,
-    degree: usize,
-) -> Result<(Array1<f64>, Array2<f64>), Box<dyn std::error::Error>> {
-    // 构建设计矩阵
-    let mut x = Array2::zeros((t.len(), degree + 1));
-    for (i, &ti) in t.iter().enumerate() {
-        for j in 0..=degree {
-            x[(i, j)] = ti.powi((degree - j) as i32);
-        }
-    }
 
-    // 计算正规方程
-    let xt = x.t();
-    let xtx = xt.dot(&x);
-    let xty = xt.dot(y);
-
-    // 求逆并计算系数
-    let xtx_inv = xtx.inv()?;
-    let coefficients = xtx_inv.dot(&xty);
-
-    // 计算协方差矩阵
-    let residuals = y - x.dot(&coefficients);
-    let sigma_sq = residuals.dot(&residuals) / (t.len() - degree - 1) as f64;
-    let covariance = &xtx_inv * sigma_sq;
-
-    Ok((coefficients, covariance))
-}
-
-fn print_equation(name: &str, coeff: &Array1<f64>) {
-    let terms = coeff
-        .iter()
-        .enumerate()
-        .map(|(i, &c)| {
-            let power = 4 - i;
-            match power {
-                0 => format!("{:.4}", c),
-                1 => format!("{:.4}t", c),
-                _ => format!("{:.4}t^{}", c, power),
+fn solve_parameters(t: &[f64], data: &[f64], model_type: &str) -> Result<Array1<f64>, Box<dyn std::error::Error>> {
+    let n = t.len();
+    let (mut a, b) = match model_type {
+        "x" => {
+            let mut a_x = Array2::<f64>::zeros((n, 5));
+            let mut b_x = Array1::<f64>::zeros(n);
+            for i in 0..n {
+                let ti = t[i];
+                let xi = data[i];
+                a_x[[i, 0]] = (1.0 - ti.cos()) * (-ti).exp(); // R (1-cos(ω)t)e^{-α t}
+                a_x[[i, 1]] = ti * (-ti).exp();               // R cos(ω)t*e^{-α t}
+                a_x[[i, 2]] = (-ti).exp();                    // Re^{-α t}
+                a_x[[i, 3]] = ti;                             // v_{x0}t
+                a_x[[i, 4]] = 1.0;                            // 常数项
+                b_x[i] = xi;
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" + ");
+            (a_x, b_x)
+        },
+        "y" => {
+            let mut a_y = Array2::<f64>::zeros((n, 4));
+            let mut b_y = Array1::<f64>::zeros(n);
+            for i in 0..n {
+                let ti = t[i];
+                let yi = data[i];
+                a_y[[i, 0]] = ti.sin() * ti * (-ti).exp();     // R sin(ω)t*e^{-α t}
+                a_y[[i, 1]] = ti * (-ti).exp();                // R cos(ω)t*e^{-α t}
+                a_y[[i, 2]] = ti;                              // v_{y0}t
+                a_y[[i, 3]] = 1.0;                             // 常数项
+                b_y[i] = yi;
+            }
+            (a_y, b_y)
+        },
+        "z" => {
+            let mut a_z = Array2::<f64>::zeros((n, 4));
+            let mut b_z = Array1::<f64>::zeros(n);
+            let g = 9.81; // 重力加速度
+            for i in 0..n {
+                let ti = t[i];
+                let zi = data[i];
+                a_z[[i, 0]] = ti;                              // v_{z0}t
+                a_z[[i, 1]] = -0.5 * g * ti.powi(2);           // -\dfrac{1}{2}gt^2
+                a_z[[i, 2]] = -ti.powi(2);                     // -β*v_{z0}t^2
+                a_z[[i, 3]] = 1.0;                             // 常数项
+                b_z[i] = zi;
+            }
+            (a_z, b_z)
+        },
+        _ => return Err("Invalid model type".into()),
+    };
 
-    println!("{} = {}", name, terms);
+    // 使用 SVD::compute 正确调用
+    let svd = a.clone().svd(true, true)?;
+    let params = svd.solve(&b)?;
+
+    Ok(params)
 }
 
-fn plot_matrix(matrix: &Array2<f64>, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let root = BitMapBackend::new(filename, (600, 600)).into_drawing_area();
-    root.fill(&WHITE)?;
-
-    let mut chart = ChartBuilder::on(&root)
-        .caption("协方差矩阵", ("sans-serif", 30))
-        .margin(20)
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_cartesian_2d(0..matrix.ncols(), 0..matrix.nrows())?;
-
-    chart.configure_mesh().disable_x_mesh().disable_y_mesh().draw()?;
-
-    let max_val = matrix.fold(f64::NEG_INFINITY, |a, &b| a.max(b.abs()));
-    let min_val = -max_val;
-
-    for i in 0..matrix.nrows() {
-        for j in 0..matrix.ncols() {
-            let value = matrix[(i, j)];
-            let color = get_color_normalized(value, min_val, max_val);
-
-            chart.draw_series(std::iter::once(
-                Rectangle::new([(j, i), (j + 1, i + 1)], color.filled())
-            ))?;
-        }
+fn calculate_error(t: &[f64], data: &[f64], params: &Array1<f64>, model_type: &str) -> f64 {
+    let n = t.len();
+    let mut error = 0.0;
+    for i in 0..n {
+        let ti = t[i];
+        let predicted = match model_type {
+            "x" => {
+                params[0] * (1.0 - ti.cos()) * (-ti).exp() +
+                    params[1] * ti * (-ti).exp() +
+                    params[2] * (-ti).exp() +
+                    params[3] * ti +
+                    params[4]
+            },
+            "y" => {
+                params[0] * ti.sin() * ti * (-ti).exp() +
+                    params[1] * ti * (-ti).exp() +
+                    params[2] * ti +
+                    params[3]
+            },
+            "z" => {
+                params[0] * ti +
+                    params[1] * -0.5 * 9.81 * ti.powi(2) +
+                    params[2] * -ti.powi(2) +
+                    params[3]
+            },
+            _ => continue,
+        };
+        error += (predicted - data[i]).powi(2);
     }
+    (error / n as f64).sqrt()
+}
+
+fn print_results(model_type: &str, params: &Array1<f64>) {
+    println!("Fitted parameters for {}(t):", model_type);
+    match model_type {
+        "x" => {
+            println!("R(1-cos(ω)t)e^{{-α t}}: {}", params[0]);
+            println!("Rcos(ω)t*e^{{-α t}}: {}", params[1]);
+            println!("Re^{{-α t}}: {}", params[2]);
+            println!("v_{{x0}}t: {}", params[3]);
+            println!("Constant term: {}", params[4]);
+        },
+        "y" => {
+            println!("Rsin(ω)t*e^{{-α t}}: {}", params[0]);
+            println!("Rcos(ω)t*e^{{-α t}}: {}", params[1]);
+            println!("v_{{y0}}t: {}", params[2]);
+            println!("Constant term: {}", params[3]);
+        },
+        "z" => {
+            println!("v_{{z0}}t: {}", params[0]);
+            println!("-\\dfrac{{1}}{{2}}gt^2: {}", params[1]);
+            println!("-β*v_{{z0}}t^2: {}", params[2]);
+            println!("Constant term: {}", params[3]);
+        },
+        _ => (),
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file_path = "ps.csv";
+    let (t, x, y, z) = read_csv(file_path)?;
+
+    let params_x = solve_parameters(&t, &x, "x")?;
+    let params_y = solve_parameters(&t, &y, "y")?;
+    let params_z = solve_parameters(&t, &z, "z")?;
+
+    let error_x = calculate_error(&t, &x, &params_x, "x");
+    let error_y = calculate_error(&t, &y, &params_y, "y");
+    let error_z = calculate_error(&t, &z, &params_z, "z");
+
+    print_results("x", &params_x);
+    println!("Root Mean Square Error for x(t): {}", error_x);
+
+    print_results("y", &params_y);
+    println!("Root Mean Square Error for y(t): {}", error_y);
+
+    print_results("z", &params_z);
+    println!("Root Mean Square Error for z(t): {}", error_z);
 
     Ok(())
-}
-
-fn get_color_normalized(value: f64, min_val: f64, max_val: f64) -> RGBColor {
-    if max_val == min_val {
-        return RGBColor(128, 128, 128); // Gray if all values are the same
-    }
-
-    let normalized_value = (value - min_val) / (max_val - min_val);
-    let r = (255.0 * (1.0 - normalized_value)) as u8;
-    let g = (255.0 * normalized_value) as u8;
-    let b = 0;
-
-    RGBColor(r, g, b)
 }
 
 

@@ -5,7 +5,6 @@ edition = "2024"
 
 # Cargo.toml 添加依赖
 [dependencies]
-polars = "0.27"
+polars = { version = "0.27", features = ["lazy"] }
+ndarray-linalg = { version = "0.15", features = ["openblas"] }
 ndarray = "0.15"
-ndarray-linalg = "0.15"
-plotters = "0.3"

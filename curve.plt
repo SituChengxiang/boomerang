@@ -14,9 +14,9 @@ set ylabel "Y" textcolor rgb "green"
 set zlabel "Z" textcolor rgb "blue"
 
 # 手动设置坐标轴范围（根据实际数据调整）
-set xrange [0.07:1.67]
-set yrange [0.75:2.99]
-set zrange [0.04:2.15]
+set xrange [0.15:1.45]
+set yrange [0.70:2.25]
+set zrange [0.05:2.20]
 
 # 打印CSV文件的前几行以进行检查
 print "First few lines of ps1.csv:"

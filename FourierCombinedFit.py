@@ -111,7 +111,7 @@ try:
     y_params = params[19:38]
     z_params = params[38:57]
     
-    # 打印结果
+    # 打印result
     param_names = ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 
                    'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 
                    'c1', 'c2', 'c3', 'd0', 'd1', 'd2']
@@ -134,46 +134,46 @@ try:
     t_fit = np.linspace(min(t_data), max(t_data), 1000)
     x_fit, y_fit, z_fit = combined_function(t_fit, *params)
 
-    # 可视化结果
+    # 可视化result
     fig = plt.figure(figsize=(12, 10))
     
     # 3D轨迹图
     ax1 = fig.add_subplot(221, projection='3d')
-    ax1.scatter(x_data, y_data, z_data, c='r', marker='o', label='数据点')
-    ax1.plot(x_fit, y_fit, z_fit, 'b-', label='拟合曲线')
+    ax1.scatter(x_data, y_data, z_data, c='r', marker='o', label='data Points')
+    ax1.plot(x_fit, y_fit, z_fit, 'b-', label='fit curve')
     ax1.set_xlabel('X (m)')
     ax1.set_ylabel('Y (m)')
     ax1.set_zlabel('Z (m)')
-    ax1.set_title('回旋镖三维轨迹')
+    ax1.set_title('Fourier Fit Result')
     ax1.legend()
     
     # X-t图
     ax2 = fig.add_subplot(222)
-    ax2.plot(t_data, x_data, 'ro', label='数据点')
-    ax2.plot(t_fit, x_fit, 'b-', label='拟合曲线')
-    ax2.set_xlabel('时间 t (s)')
+    ax2.plot(t_data, x_data, 'ro', label='data Points')
+    ax2.plot(t_fit, x_fit, 'b-', label='fit curve')
+    ax2.set_xlabel('time t (s)')
     ax2.set_ylabel('X (m)')
-    ax2.set_title('X(t) 结果')
+    ax2.set_title('X(t) result')
     ax2.grid(True)
     ax2.legend()
     
     # Y-t图
     ax3 = fig.add_subplot(223)
-    ax3.plot(t_data, y_data, 'ro', label='数据点')
-    ax3.plot(t_fit, y_fit, 'b-', label='拟合曲线')
-    ax3.set_xlabel('时间 t (s)')
+    ax3.plot(t_data, y_data, 'ro', label='data Points')
+    ax3.plot(t_fit, y_fit, 'b-', label='fit curve')
+    ax3.set_xlabel('time t (s)')
     ax3.set_ylabel('Y (m)')
-    ax3.set_title('Y(t) 结果')
+    ax3.set_title('Y(t) result')
     ax3.grid(True)
     ax3.legend()
     
     # Z-t图
     ax4 = fig.add_subplot(224)
-    ax4.plot(t_data, z_data, 'ro', label='数据点')
-    ax4.plot(t_fit, z_fit, 'b-', label='拟合曲线')
-    ax4.set_xlabel('时间 t (s)')
+    ax4.plot(t_data, z_data, 'ro', label='data Points')
+    ax4.plot(t_fit, z_fit, 'b-', label='fit curve')
+    ax4.set_xlabel('time t (s)')
     ax4.set_ylabel('Z (m)')
-    ax4.set_title('Z(t) 结果')
+    ax4.set_title('Z(t) result')
     ax4.grid(True)
     ax4.legend()
     

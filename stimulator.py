@@ -2,11 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 import pandas as pd
-from data_utils import read_csv, get_initial_conditions
+from data_utils import read_csv, get_initial_conditions, params_fixed
 from plot_utils import plot_comparison
 
 # 从mathematicalMethod中导入动力学方程和初始条件
-from mathematicalMethod import dynamics, params_fixed, initial_state, t_data, xyz_data
+from mathematicalMethod import dynamics, initial_state, t_data, xyz_data
 
 # 读取数据并获取初始条件
 data = read_csv('ps.csv')

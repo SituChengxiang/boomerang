@@ -6,7 +6,7 @@ from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 from scipy.optimize import minimize
-from data_utils import read_csv, get_initial_conditions
+from data_utils import read_csv, get_initial_conditions, params_fixed
 from plot_utils import plot_data_points, plot_comparison
 
 # 读取数据并获取初始条件
@@ -129,17 +129,6 @@ def dynamics(t, state, C_L, C_D, theta_deg, params, t0=0):
 # 初始参数
 # 计算初始状态（完整的6维状态向量）
 initial_state = [x0, y0, z0, v_x0, v_y0, v_z0]
-
-# 修正params_fixed字典，保持名称一致
-params_fixed = {
-    'a': 0.15,        # 翼展 (m)
-    'd': 0.028,       # 翼宽 (m)
-    'm': 0.002183,    # 质量 (kg)
-    'I': (5/24) * 0.002183 * (0.15)**2,  # 转动惯量
-    'omega': 10.0,    # 固定角速度 (rad/s)
-    'rho': 1.225,     # 空气密度 (kg/m^3)
-    'g': 9.793        # 重力加速度 (m/s²)
-}
 
 # =============================
 # 5. 目标函数（误差 + 正则化项）

@@ -5,19 +5,19 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from data_utils import read_csv, get_initial_conditions
+from data_utils import read_csv, get_initial_conditions, params_fixed
 from plot_utils import plot_comparison
 
-# 已知参数（示例值，需替换为实际数据）
-a = 0.15      # 翼展 (m)
-d = 0.028     # 翼宽 (m)
-m = 0.002183      # 质量 (kg)
-g = 9.793    # 杭州重力加速度 (m/s²)
-rho = 1.225  # 空气密度 (kg/m³)
-A = a * d    # 翼面积
-I_x = 0.01   # 绕x轴转动惯量 (kg·m²)
-omega = 10   # 初始滚转角速度 (rad/s)
-r = a / 2    # 翼片到质心距离 (m)
+# 提取需要的参数以简化代码
+a = params_fixed['a']      # 翼展 (m)
+d = params_fixed['d']      # 翼宽 (m)
+m = params_fixed['m']      # 质量 (kg)
+g = params_fixed['g']      # 杭州重力加速度 (m/s²)
+rho = params_fixed['rho']  # 空气密度 (kg/m³)
+A = a * d                  # 翼面积
+I_x = params_fixed['I']    # 绕x轴转动惯量 (kg·m²)
+omega = params_fixed['omega'] # 初始滚转角速度 (rad/s)
+r = a / 2                  # 翼片到质心距离 (m)
 
 # 动力学方程（只保留一个定义，包含theta_0_deg参数）
 def dynamics(t, state, C_L, C_D, theta_0_deg):

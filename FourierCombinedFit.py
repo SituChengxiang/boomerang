@@ -3,17 +3,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from data_utils import read_csv, get_initial_conditions
+from data_utils import read_csv, get_initial_conditions, params_fixed
 from plot_utils import plot_comparison
-
-# 固定重力加速度为杭州地区的值（单位：m/s²）
-G_HANGZHOU = 9.78
-# 回旋镖质量（单位：kg）
-M_BOOMERANG = 0.002183  # 2.183g
-
-# 读取CSV文件
-def read_csv(file_path):
-    return pd.read_csv(file_path)
 
 # 定义傅里叶-多项式混合函数用于x(t)、y(t)和z(t)拟合
 def fourier_poly(t, a0, a1, a2, a3, a4, a5, a6, b1, b2, b3, b4, b5, b6, c1, c2, c3, d0, d1, d2):
@@ -127,7 +118,7 @@ try:
     for i, name in enumerate(param_names):
         print(f"  z_{name}: {z_params[i]}")
         
-    print(f"\n回旋镖质量: {M_BOOMERANG} kg")
+    print(f"\n回旋镖质量: {params_fixed['m']} kg")
 
     # 计算拟合后的曲线点
     t_fit = np.linspace(min(t_data), max(t_data), 1000)

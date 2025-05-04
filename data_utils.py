@@ -1,6 +1,18 @@
 import pandas as pd
 import numpy as np
 
+# 回旋镖物理参数
+params_fixed = {
+    'a': 0.15,        # 翼展 (m)
+    'd': 0.028,       # 翼宽 (m)
+    'm': 0.002183,    # 质量 (kg)
+    'I': (5/24) * 0.002183 * (0.15)**2,  # 转动惯量
+    'omega': 10.0,    # 固定角速度 (rad/s)
+    'rho': 1.225,     # 空气密度 (kg/m^3)
+    'g': 9.793        # 重力加速度 (m/s²)
+}
+
+# 读取CSV文件
 def read_csv(file_path):
     """
     从CSV文件中读取数据。

@@ -3,17 +3,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from data_utils import read_csv, get_initial_conditions
+from data_utils import read_csv, get_initial_conditions, params_fixed
 from plot_utils import plot_comparison
-
-# 固定重力加速度为杭州地区的值（单位：m/s²）
-G_HANGZHOU = 9.78
-# 回旋镖质量（单位：kg）
-M_BOOMERANG = 0.002183  # 2.183g
-
-# 读取CSV文件
-def read_csv(file_path):
-    return pd.read_csv(file_path)
 
 # 定义x(t)的解析式 - 基于空气动力学模型
 def x_t(t, C, k_v, k_omega):
@@ -48,7 +39,8 @@ def z_t(t, vz0, beta, z0):
     beta: 额外的衰减系数
     z0: 初始高度
     """
-    return vz0 * t - 0.5 * G_HANGZHOU * t**2 - beta * t**2 + z0
+    g = params_fixed['g']
+    return vz0 * t - 0.5 * g * t**2 - beta * t**2 + z0
 
 # 合并的函数用于curve_fit
 def combined_function(t, C, k_v, k_omega, v_y0, vz0, beta, z0):
@@ -101,8 +93,8 @@ try:
     print(f"  vz0: {vz0_fit} (z方向初速度)")
     print(f"  beta: {beta_fit} (z方向额外衰减)")
     print(f"  z0: {z0_fit} (初始高度)")
-    print(f"  g (固定值): {G_HANGZHOU}")
-    print(f"回旋镖质量: {M_BOOMERANG} kg")
+    print(f"  g (固定值): {params_fixed['g']}")
+    print(f"回旋镖质量: {params_fixed['m']} kg")
 
     # 计算拟合后的曲线点
     t_fit = np.linspace(min(t_data), max(t_data), 1000)

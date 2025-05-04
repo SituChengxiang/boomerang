@@ -10,3 +10,5 @@
 /.idea/
 /debug/
 /.vs/
+/_pycaches_/
+Cargo.lock

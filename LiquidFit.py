@@ -3,6 +3,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from data_utils import read_csv, get_initial_conditions
+from plot_utils import plot_comparison
 
 # 固定重力加速度为杭州地区的值（单位：m/s²）
 G_HANGZHOU = 9.78
@@ -58,12 +60,12 @@ def combined_function(t, C, k_v, k_omega, v_y0, vz0, beta, z0):
     z = z_t(t, vz0, beta, z0)
     return x, y, z
 
-# 读取数据
+# 读取数据并获取初始条件
 data = read_csv('ps.csv')
-t_data = data['t'].values
-x_data = data['x'].values
-y_data = data['y'].values
-z_data = data['z'].values
+t_data, xyz_data, _ = get_initial_conditions(data)
+x_data = xyz_data[:, 0]
+y_data = xyz_data[:, 1]
+z_data = xyz_data[:, 2]
 
 # 初始参数猜测
 initial_guess = [
@@ -106,53 +108,6 @@ try:
     t_fit = np.linspace(min(t_data), max(t_data), 1000)
     x_fit, y_fit, z_fit = combined_function(t_fit, *params)
 
-    # 可视化
-    fig = plt.figure(figsize=(12, 10))
-    
-    # 3D轨迹图
-    ax1 = fig.add_subplot(221, projection='3d')
-    ax1.scatter(x_data, y_data, z_data, c='r', marker='o', label='Data Points')
-    ax1.plot(x_fit, y_fit, z_fit, 'b-', label='Fit Curve')
-    ax1.set_xlabel('X (m)')
-    ax1.set_ylabel('Y (m)')
-    ax1.set_zlabel('Z (m)')
-    ax1.set_title('3D Trace')
-    ax1.legend()
-    
-    # X-t图
-    ax2 = fig.add_subplot(222)
-    ax2.plot(t_data, x_data, 'ro', label='Data Points')
-    ax2.plot(t_fit, x_fit, 'b-', label='Fit Curve')
-    ax2.set_xlabel(' t (s)')
-    ax2.set_ylabel('X (m)')
-    ax2.set_title('X(t) ')
-    ax2.grid(True)
-    ax2.legend()
-    
-    # Y-t图
-    ax3 = fig.add_subplot(223)
-    ax3.plot(t_data, y_data, 'ro', label='Data Points')
-    ax3.plot(t_fit, y_fit, 'b-', label='Fit Curve')
-    ax3.set_xlabel(' t (s)')
-    ax3.set_ylabel('Y (m)')
-    ax3.set_title('Y(t) ')
-    ax3.grid(True)
-    ax3.legend()
-    
-    # Z-t图
-    ax4 = fig.add_subplot(224)
-    ax4.plot(t_data, z_data, 'ro', label='Data Points')
-    ax4.plot(t_fit, z_fit, 'b-', label='Fit Curve')
-    ax4.set_xlabel(' t (s)')
-    ax4.set_ylabel('Z (m)')
-    ax4.set_title('Z(t) ')
-    ax4.grid(True)
-    ax4.legend()
-    
-    plt.tight_layout()
-    plt.savefig('fit_results_aerodynamic.png', dpi=300)
-    plt.show()
-
     # 计算拟合误差
     x_fit_data = x_t(t_data, C_fit, k_v_fit, k_omega_fit)
     y_fit_data = y_t(t_data, v_y0_fit, k_v_fit)
@@ -175,3 +130,10 @@ except RuntimeError as e:
 except ValueError as e:
     print(f"值错误: {e}")
     print("可能是模型参数导致计算溢出，请尝试调整初始参数范围")
+
+# 绘制对比图
+data_3d = xyz_data
+data_xt = np.column_stack((t_data, x_data))
+data_yt = np.column_stack((t_data, y_data))
+data_zt = np.column_stack((t_data, z_data))
+plot_comparison(data_3d, data_xt, data_yt, data_zt, title="Liquid Fit Result")

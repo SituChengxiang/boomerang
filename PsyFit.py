@@ -5,6 +5,8 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from data_utils import read_csv, get_initial_conditions
+from plot_utils import plot_comparison
 
 # 已知参数（示例值，需替换为实际数据）
 a = 0.15      # 翼展 (m)
@@ -89,53 +91,16 @@ def plot_results(data, times, params):
     x_fit = sol.y[0]
     y_fit = sol.y[1]
     z_fit = sol.y[2]
+    xyz_fit = np.column_stack((x_fit, y_fit, z_fit))
     
-    # 创建图表
-    fig = plt.figure(figsize=(12, 10))
-    
-    # 3D轨迹图
-    ax1 = fig.add_subplot(221, projection='3d')
-    ax1.scatter(data['x'], data['y'], data['z'], c='r', marker='o', label='origin_data')
-    ax1.plot(x_fit, y_fit, z_fit, 'b-', label='fit-curve')
-    ax1.set_xlabel('X (m)')
-    ax1.set_ylabel('Y (m)')
-    ax1.set_zlabel('Z (m)')
-    ax1.set_title('回旋镖3D轨迹')
-    ax1.legend()
-    
-    # X-t图
-    ax2 = fig.add_subplot(222)
-    ax2.plot(times, data['x'], 'ro', markersize=3, label='origin_data')
-    ax2.plot(sol.t, sol.y[0], 'b-', label='fit-curve')
-    ax2.set_xlabel('时间 t (s)')
-    ax2.set_ylabel('X (m)')
-    ax2.set_title('X(t) 结果')
-    ax2.legend()
-    
-    # Y-t图
-    ax3 = fig.add_subplot(223)
-    ax3.plot(times, data['y'], 'ro', markersize=3, label='origin_data')
-    ax3.plot(sol.t, sol.y[1], 'b-', label='fit-curve')
-    ax3.set_xlabel('时间 t (s)')
-    ax3.set_ylabel('Y (m)')
-    ax3.set_title('Y(t) 结果')
-    ax3.legend()
-    
-    # Z-t图
-    ax4 = fig.add_subplot(224)
-    ax4.plot(times, data['z'], 'ro', markersize=3, label='origin_data')
-    ax4.plot(sol.t, sol.y[2], 'b-', label='fit-curve')
-    ax4.set_xlabel('时间 t (s)')
-    ax4.set_ylabel('Z (m)')
-    ax4.set_title('Z(t) 结果')
-    ax4.legend()
-    
-    plt.tight_layout()
-    plt.savefig('psyfit_results.png', dpi=300)
-    plt.show()
+    # 绘制对比图
+    data_3d = xyz_data
+    data_xt = np.column_stack((t_data, xyz_data[:, 0]))
+    data_yt = np.column_stack((t_data, xyz_data[:, 1]))
+    data_zt = np.column_stack((t_data, xyz_data[:, 2]))
+    plot_comparison(data_3d, data_xt, data_yt, data_zt, title="PsyFit Result")
     
     # 计算拟合误差
-    # 在origin_data点上求解
     sol_orig = solve_ivp(lambda t, y: dynamics(t, y, C_L, C_D, theta_0_deg), 
                          [0, times[-1]], initial_state, t_eval=times)
     
@@ -161,7 +126,7 @@ def main():
             print("错误：未找到ps.csv文件")
             return
         
-        data = pd.read_csv('ps.csv')
+        data = read_csv('ps.csv')
         print(f"成功读取数据，共{len(data)}个数据点")
         
         # 检查数据是否包含 't' 列，如果有则使用，否则创建均匀时间点

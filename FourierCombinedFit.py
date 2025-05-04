@@ -3,6 +3,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from data_utils import read_csv, get_initial_conditions
+from plot_utils import plot_comparison
 
 # 固定重力加速度为杭州地区的值（单位：m/s²）
 G_HANGZHOU = 9.78
@@ -67,12 +69,9 @@ def combined_function(t,
     
     return x, y, z
 
-# 读取数据
+# 读取数据并获取初始条件
 data = read_csv('ps.csv')
-t_data = data['t'].values
-x_data = data['x'].values
-y_data = data['y'].values
-z_data = data['z'].values
+t_data, xyz_data, _ = get_initial_conditions(data)
 
 # 初始参数猜测
 initial_guess = [
@@ -137,49 +136,12 @@ try:
     # 可视化result
     fig = plt.figure(figsize=(12, 10))
     
-    # 3D轨迹图
-    ax1 = fig.add_subplot(221, projection='3d')
-    ax1.scatter(x_data, y_data, z_data, c='r', marker='o', label='data Points')
-    ax1.plot(x_fit, y_fit, z_fit, 'b-', label='fit curve')
-    ax1.set_xlabel('X (m)')
-    ax1.set_ylabel('Y (m)')
-    ax1.set_zlabel('Z (m)')
-    ax1.set_title('Fourier Fit Result')
-    ax1.legend()
-    
-    # X-t图
-    ax2 = fig.add_subplot(222)
-    ax2.plot(t_data, x_data, 'ro', label='data Points')
-    ax2.plot(t_fit, x_fit, 'b-', label='fit curve')
-    ax2.set_xlabel('time t (s)')
-    ax2.set_ylabel('X (m)')
-    ax2.set_title('X(t) result')
-    ax2.grid(True)
-    ax2.legend()
-    
-    # Y-t图
-    ax3 = fig.add_subplot(223)
-    ax3.plot(t_data, y_data, 'ro', label='data Points')
-    ax3.plot(t_fit, y_fit, 'b-', label='fit curve')
-    ax3.set_xlabel('time t (s)')
-    ax3.set_ylabel('Y (m)')
-    ax3.set_title('Y(t) result')
-    ax3.grid(True)
-    ax3.legend()
-    
-    # Z-t图
-    ax4 = fig.add_subplot(224)
-    ax4.plot(t_data, z_data, 'ro', label='data Points')
-    ax4.plot(t_fit, z_fit, 'b-', label='fit curve')
-    ax4.set_xlabel('time t (s)')
-    ax4.set_ylabel('Z (m)')
-    ax4.set_title('Z(t) result')
-    ax4.grid(True)
-    ax4.legend()
-    
-    plt.tight_layout()
-    plt.savefig('fit_results_fourier_all_axes.png', dpi=300)
-    plt.show()
+    # 绘制对比图
+    data_3d = xyz_data
+    data_xt = np.column_stack((t_data, xyz_data[:, 0]))
+    data_yt = np.column_stack((t_data, xyz_data[:, 1]))
+    data_zt = np.column_stack((t_data, xyz_data[:, 2]))
+    plot_comparison(data_3d, data_xt, data_yt, data_zt, title="Fourier Fit Result")
 
     # 计算拟合误差
     x_fit_data = fourier_poly(t_data, *x_params)

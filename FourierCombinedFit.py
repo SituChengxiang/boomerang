@@ -1,154 +1,180 @@
-import pandas as pd
 import numpy as np
 from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from data_utils import read_csv, get_initial_conditions, params_fixed
+from data_utils import read_csv, analyze_noise_reduction, params_fixed
 from plot_utils import plot_comparison
 
-# 定义傅里叶-多项式混合函数用于x(t)、y(t)和z(t)拟合
-def fourier_poly(t, a0, a1, a2, a3, a4, a5, a6, b1, b2, b3, b4, b5, b6, c1, c2, c3, d0, d1, d2):
+def fourier_series(t, n_terms, *coeffs):
     """
-    傅里叶-多项式混合函数:
-    f(t) = a0 + a1*cos(w*t) + a2*cos(2*w*t) + ... + a6*cos(6*w*t) + 
-           b1*sin(w*t) + b2*sin(2*w*t) + ... + b6*sin(6*w*t) +
-           c1*t + c2*t^2 + c3*t^3 + d0*exp(-d1*t) + d2
+    计算n_terms阶傅里叶级数。
     
     参数:
-    a0~a6: 余弦项系数
-    b1~b6: 正弦项系数
-    c1~c3: 多项式项系数
-    d0,d1,d2: 指数衰减项相关参数
+    t: 时间数组
+    n_terms: 傅里叶级数的阶数
+    coeffs: 系数数组 [a0, a1, b1, a2, b2, ...]
     """
-    w = 2*np.pi  # 基本频率
-    fourier_part = a0 + a1*np.cos(w*t) + a2*np.cos(2*w*t) + a3*np.cos(3*w*t) + \
-                  a4*np.cos(4*w*t) + a5*np.cos(5*w*t) + a6*np.cos(6*w*t) + \
-                  b1*np.sin(w*t) + b2*np.sin(2*w*t) + b3*np.sin(3*w*t) + \
-                  b4*np.sin(4*w*t) + b5*np.sin(5*w*t) + b6*np.sin(6*w*t)
-    poly_part = c1*t + c2*t**2 + c3*t**3
-    exp_part = d0*np.exp(-d1*t) + d2
-    
-    return fourier_part + poly_part + exp_part
+    result = coeffs[0]  # a0项
+    for i in range(n_terms):
+        k = i + 1
+        a_k = coeffs[2*i + 1]
+        b_k = coeffs[2*i + 2]
+        result += a_k * np.cos(k * t) + b_k * np.sin(k * t)
+    return result
 
-# 合并的函数用于curve_fit
-def combined_function(t, 
-                     x_a0, x_a1, x_a2, x_a3, x_a4, x_a5, x_a6, 
-                     x_b1, x_b2, x_b3, x_b4, x_b5, x_b6, 
-                     x_c1, x_c2, x_c3, x_d0, x_d1, x_d2,
-                     
-                     y_a0, y_a1, y_a2, y_a3, y_a4, y_a5, y_a6,
-                     y_b1, y_b2, y_b3, y_b4, y_b5, y_b6,
-                     y_c1, y_c2, y_c3, y_d0, y_d1, y_d2,
-                     
-                     z_a0, z_a1, z_a2, z_a3, z_a4, z_a5, z_a6,
-                     z_b1, z_b2, z_b3, z_b4, z_b5, z_b6,
-                     z_c1, z_c2, z_c3, z_d0, z_d1, z_d2):
-    x = fourier_poly(t, 
-                     x_a0, x_a1, x_a2, x_a3, x_a4, x_a5, x_a6, 
-                     x_b1, x_b2, x_b3, x_b4, x_b5, x_b6, 
-                     x_c1, x_c2, x_c3, x_d0, x_d1, x_d2)
+def physical_base(t, v0, theta, phi, C_L, C_D):
+    """
+    基础物理模型。
     
-    y = fourier_poly(t, 
-                     y_a0, y_a1, y_a2, y_a3, y_a4, y_a5, y_a6,
-                     y_b1, y_b2, y_b3, y_b4, y_b5, y_b6,
-                     y_c1, y_c2, y_c3, y_d0, y_d1, y_d2)
+    参数:
+    v0: 初始速度
+    theta: 投掷角度
+    phi: 方位角
+    C_L: 升力系数
+    C_D: 阻力系数
+    """
+    # 从params_fixed获取物理参数
+    a = params_fixed['a']        # 翼展
+    d = params_fixed['d']        # 翼宽
+    m = params_fixed['m']        # 质量
+    rho = params_fixed['rho']    # 空气密度
+    g = params_fixed['g']        # 重力加速度
     
-    z = fourier_poly(t, 
-                     z_a0, z_a1, z_a2, z_a3, z_a4, z_a5, z_a6,
-                     z_b1, z_b2, z_b3, z_b4, z_b5, z_b6,
-                     z_c1, z_c2, z_c3, z_d0, z_d1, z_d2)
+    # 计算初始速度分量
+    vx0 = v0 * np.cos(theta) * np.cos(phi)
+    vy0 = v0 * np.cos(theta) * np.sin(phi)
+    vz0 = v0 * np.sin(theta)
+    
+    # 特征面积
+    A = a * d
+    
+    # 计算空气动力学参数
+    k_L = 0.5 * rho * A * C_L
+    k_D = 0.5 * rho * A * C_D
+    
+    # 计算基础轨迹
+    x = vx0 * t - (k_D / m) * vx0 * t**2
+    y = vy0 * t - (k_D / m) * vy0 * t**2
+    z = vz0 * t - 0.5 * g * t**2 - (k_D / m) * vz0 * t**2
     
     return x, y, z
 
-# 读取数据并获取初始条件
-data = read_csv('ps.csv')
-t_data, xyz_data, _ = get_initial_conditions(data)
+def combined_model(t, n_terms, v0, theta, phi, C_L, C_D, k_damp, *fourier_coeffs):
+    """
+    物理模型和傅里叶级数的组合模型。
+    
+    参数:
+    t: 时间数组
+    n_terms: 傅里叶级数的阶数
+    v0, theta, phi: 初始运动参数
+    C_L, C_D: 空气动力系数
+    k_damp: 阻尼系数
+    fourier_coeffs: 傅里叶系数 [ax0,ax1,bx1,...,ay0,ay1,by1,...]
+    """
+    # 计算物理基础轨迹
+    x_phys, y_phys, z_phys = physical_base(t, v0, theta, phi, C_L, C_D)
+    
+    # 分离x和y方向的傅里叶系数
+    n_fourier_coeffs = 2*n_terms + 1
+    x_coeffs = fourier_coeffs[:n_fourier_coeffs]
+    y_coeffs = fourier_coeffs[n_fourier_coeffs:]
+    
+    # 计算傅里叶修正项（带阻尼）
+    damping = np.exp(-k_damp * t)
+    x_corr = fourier_series(t, n_terms, *x_coeffs) * damping
+    y_corr = fourier_series(t, n_terms, *y_coeffs) * damping
+    
+    # 组合物理模型和修正项
+    x = x_phys + x_corr
+    y = y_phys + y_corr
+    z = z_phys
+    
+    return np.column_stack([t, x, y, z])
 
-# 初始参数猜测
-initial_guess = [
-    # x坐标的傅里叶-多项式参数
-    0.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001,  # x_a0 ~ x_a6
-    0.5, 0.1, 0.05, 0.01, 0.005, 0.001,       # x_b1 ~ x_b6
-    0.5, 0.1, 0.01,                          # x_c1, x_c2, x_c3
-    0.5, 0.5, 0.0,                           # x_d0, x_d1, x_d2
+def main():
+    # 读取数据
+    print("读取原始数据...")
+    data = read_csv()
     
-    # y坐标的傅里叶-多项式参数
-    0.0, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001,  # y_a0 ~ y_a6
-    0.5, 0.1, 0.05, 0.01, 0.005, 0.001,       # y_b1 ~ y_b6
-    0.5, 0.1, 0.01,                          # y_c1, y_c2, y_c3
-    0.5, 0.5, 0.0,                           # y_d0, y_d1, y_d2
+    # 提取时间和坐标数据
+    t_data = data[:, 0]
+    xyz_data = data[:, 1:4]
     
-    # z坐标的傅里叶-多项式参数
-    1.0, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005,  # z_a0 ~ z_a6
-    0.1, 0.05, 0.01, 0.005, 0.001, 0.0005,       # z_b1 ~ z_b6
-    1.7, -5.0, 0.01,                            # z_c1, z_c2, z_c3
-    0.1, 1.0, 1.0                               # z_d0, z_d1, z_d2
-]
-
-# 进行拟合
-try:
-    params, covariance = curve_fit(
-        lambda t, *params: 
-        np.concatenate(combined_function(t, *params)), 
-        t_data, 
-        np.concatenate((x_data, y_data, z_data)), 
-        p0=initial_guess,
-        maxfev=1000000  # 增加最大迭代次数
-    )
+    # 设置傅里叶级数阶数
+    n_terms = 2
     
-    # 提取拟合参数
-    x_params = params[0:19]
-    y_params = params[19:38]
-    z_params = params[38:57]
+    # 计算每个方向需要的傅里叶系数数量
+    n_fourier_coeffs = 2*n_terms + 1
     
-    # 打印result
-    param_names = ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 
-                   'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 
-                   'c1', 'c2', 'c3', 'd0', 'd1', 'd2']
+    # 初始参数猜测
+    initial_guess = [
+        10.0,   # v0 - 初始速度
+        0.2,    # theta - 投掷角度
+        0.1,    # phi - 方位角
+        1.2,    # C_L - 升力系数
+        0.1,    # C_D - 阻力系数
+        0.5     # k_damp - 阻尼系数
+    ]
     
-    print("X方向傅里叶-多项式参数:")
-    for i, name in enumerate(param_names):
-        print(f"  x_{name}: {x_params[i]}")
+    # 添加x和y方向的傅里叶系数初始猜测
+    initial_guess.extend([0.1] * (2 * n_fourier_coeffs))
+    
+    try:
+        # 进行拟合
+        print(f"正在拟合数据（使用{n_terms}阶傅里叶级数）...")
+        params, _ = curve_fit(
+            lambda t, *p: combined_model(t, n_terms, *p)[:, 1:4].ravel(), 
+            t_data, 
+            xyz_data.ravel(), 
+            p0=initial_guess,
+            maxfev=1000000
+        )
         
-    print("\nY方向傅里叶-多项式参数:")
-    for i, name in enumerate(param_names):
-        print(f"  y_{name}: {y_params[i]}")
-    
-    print("\nZ方向傅里叶-多项式参数:")
-    for i, name in enumerate(param_names):
-        print(f"  z_{name}: {z_params[i]}")
+        # 提取基本参数
+        v0_fit, theta_fit, phi_fit, C_L_fit, C_D_fit, k_damp_fit = params[:6]
+        fourier_coeffs = params[6:]
         
-    print(f"\n回旋镖质量: {params_fixed['m']} kg")
+        # 打印物理参数
+        print("\n物理模型参数:")
+        print(f"v0 (初始速度): {v0_fit:.6f} m/s")
+        print(f"theta (投掷角度): {theta_fit:.6f} rad ({np.degrees(theta_fit):.2f}°)")
+        print(f"phi (方位角): {phi_fit:.6f} rad ({np.degrees(phi_fit):.2f}°)")
+        print(f"C_L (升力系数): {C_L_fit:.6f}")
+        print(f"C_D (阻力系数): {C_D_fit:.6f}")
+        print(f"k_damp (阻尼系数): {k_damp_fit:.6f}")
+        
+        # 打印傅里叶系数
+        print("\nX方向傅里叶修正系数:")
+        for i in range(n_terms + 1):
+            if i == 0:
+                print(f"a{i}: {fourier_coeffs[i]:.6f}")
+            else:
+                print(f"a{i}: {fourier_coeffs[2*i-1]:.6f}")
+                print(f"b{i}: {fourier_coeffs[2*i]:.6f}")
+        
+        print("\nY方向傅里叶修正系数:")
+        offset = n_fourier_coeffs
+        for i in range(n_terms + 1):
+            if i == 0:
+                print(f"a{i}: {fourier_coeffs[offset+i]:.6f}")
+            else:
+                print(f"a{i}: {fourier_coeffs[offset+2*i-1]:.6f}")
+                print(f"b{i}: {fourier_coeffs[offset+2*i]:.6f}")
+        
+        # 生成拟合数据
+        fitted_data = combined_model(t_data, n_terms, *params)
+        
+        # 分析误差
+        stats = analyze_noise_reduction(data, fitted_data)
+        print("\n拟合误差统计:")
+        print(f"平均偏差: {stats['mean_difference']:.6f} m")
+        print(f"最大偏差: {stats['max_difference']:.6f} m")
+        print(f"标准差: {stats['std_difference']:.6f} m")
+        
+        # 绘制对比图
+        print("\n绘制拟合结果...")
+        plot_comparison(fitted_data, title=f"Combined Physics-Fourier Model (n={n_terms})")
+        
+    except Exception as e:
+        print(f"拟合过程中出错: {e}")
 
-    # 计算拟合后的曲线点
-    t_fit = np.linspace(min(t_data), max(t_data), 1000)
-    x_fit, y_fit, z_fit = combined_function(t_fit, *params)
-
-    # 可视化result
-    fig = plt.figure(figsize=(12, 10))
-    
-    # 绘制对比图
-    data_3d = xyz_data
-    data_xt = np.column_stack((t_data, xyz_data[:, 0]))
-    data_yt = np.column_stack((t_data, xyz_data[:, 1]))
-    data_zt = np.column_stack((t_data, xyz_data[:, 2]))
-    plot_comparison(data_3d, data_xt, data_yt, data_zt, title="Fourier Fit Result")
-
-    # 计算拟合误差
-    x_fit_data = fourier_poly(t_data, *x_params)
-    y_fit_data = fourier_poly(t_data, *y_params)
-    z_fit_data = fourier_poly(t_data, *z_params)
-    
-    x_error = np.mean((x_fit_data - x_data)**2)
-    y_error = np.mean((y_fit_data - y_data)**2)
-    z_error = np.mean((z_fit_data - z_data)**2)
-    
-    print("\n均方误差:")
-    print(f"  X均方误差: {x_error}")
-    print(f"  Y均方误差: {y_error}")
-    print(f"  Z均方误差: {z_error}")
-    print(f"  总均方误差: {(x_error + y_error + z_error)/3}")
-    
-except RuntimeError as e:
-    print(f"拟合过程中出现错误: {e}")
-    print("请尝试修改初始参数或增加maxfev值")
+if __name__ == "__main__":
+    main()

@@ -10,7 +10,7 @@ params_fixed = {
     'g': 9.793        # 重力加速度 (m/s²)
 }
 
-def read_csv(file_path='ps1.csv'):
+def read_csv(file_path='ps.csv'):
     """
     读取CSV文件中的回旋镖轨迹数据。
     
@@ -19,17 +19,13 @@ def read_csv(file_path='ps1.csv'):
     """
     try:
         # 使用numpy读取CSV文件，跳过header行
-        xyz_data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
+        data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
         
         # 检查数据维度
-        if xyz_data.shape[1] != 3:
-            raise ValueError("CSV文件必须包含三列：x,y,z")
+        if data.shape[1] != 4:
+            raise ValueError("CSV文件必须包含四列：t,x,y,z")
         
-        # 生成时间数组（假设采样间隔为0.1秒）
-        t = np.arange(len(xyz_data)) * 0.15
-        
-        # 组合时间和坐标数据
-        return np.column_stack([t, xyz_data])
+        return data
         
     except Exception as e:
         raise Exception(f"读取CSV文件时出错：{str(e)}")
@@ -37,28 +33,55 @@ def read_csv(file_path='ps1.csv'):
 def get_initial_conditions(data):
     """
     从轨迹数据中提取初始条件，包括初始位置和速度。
+    同时计算整个轨迹的速度数据。
     
     :param data: 数组，结构为[[t,x,y,z],...]
-    :return: 数组，包含[t_0, x_0, y_0, z_0, v_x0, v_y0, v_z0]
+    :return: tuple (初始条件数组, 带速度的完整数据数组)
     """
-    if len(data) < 2:
-        raise ValueError("需要至少两个数据点来计算初始速度")
+    if len(data) < 3:
+        raise ValueError("需要至少三个数据点来计算平滑的速度")
     
-    # 提取初始位置
-    t_0, x_0, y_0, z_0 = data[0]
+    # 提取时间和位置数据
+    times = data[:, 0]
+    positions = data[:, 1:4]
     
-    # 计算初始速度（通过前两个点的差分）
-    t_1, x_1, y_1, z_1 = data[1]
-    dt = t_1 - t_0
+    # 使用中心差分计算速度（对内部点）
+    velocities = np.zeros_like(positions)
+    for i in range(1, len(data)-1):
+        dt_forward = times[i+1] - times[i]
+        dt_backward = times[i] - times[i-1]
+        dt_center = dt_forward + dt_backward
+        
+        if dt_center <= 0:
+            raise ValueError(f"时间差异无效：位置 {i}")
+        
+        # 使用中心差分计算速度
+        velocities[i] = (positions[i+1] - positions[i-1]) / dt_center
     
-    if dt <= 0:
-        raise ValueError("时间差必须为正值")
+    # 对边界点使用前向/后向差分
+    dt_first = times[1] - times[0]
+    dt_last = times[-1] - times[-2]
     
-    v_x0 = (x_1 - x_0) / dt
-    v_y0 = (y_1 - y_0) / dt
-    v_z0 = (z_1 - z_0) / dt
+    if dt_first <= 0 or dt_last <= 0:
+        raise ValueError("边界时间差异无效")
     
-    return np.array([t_0, x_0, y_0, z_0, v_x0, v_y0, v_z0])
+    velocities[0] = (positions[1] - positions[0]) / dt_first
+    velocities[-1] = (positions[-1] - positions[-2]) / dt_last
+    
+    # 创建包含速度的完整数据数组
+    full_data = np.column_stack((data, velocities))
+    
+    # 返回初始条件和完整数据
+    initial_conditions = np.array([
+        data[0, 1],  # x_0
+        data[0, 2],  # y_0
+        data[0, 3],  # z_0
+        velocities[0, 0],  # v_x0
+        velocities[0, 1],  # v_y0
+        velocities[0, 2]   # v_z0
+    ])
+    
+    return initial_conditions, full_data
 
 class KalmanFilter:
     """
@@ -122,42 +145,70 @@ def apply_kalman_filter(data):
     """
     对轨迹数据应用卡尔曼滤波。
     
-    :param data: 数组，结构为[[t,x,y,z],...]
-    :return: 数组，结构为[[t,x,y,z],...]，包含滤波后的结果
+    :param data: 数组，可以是 [t,x,y,z] 或 [t,x,y,z,vx,vy,vz] 格式
+    :return: 数组，结构为 [t,x,y,z,vx,vy,vz]，包含滤波后的结果
     """
     # 创建卡尔曼滤波器实例
     kf = KalmanFilter()
     
     # 准备结果数组
-    filtered_positions = []
+    filtered_states = []
+    
+    # 提取时间和位置数据
+    times = data[:, 0]
+    positions = data[:, 1:4]
     
     # 对每个时间点的数据进行滤波
-    for point in data:
-        t, x, y, z = point
-        measurement = np.array([x, y, z])
+    for i, (t, pos) in enumerate(zip(times, positions)):
+        # 预测
         kf.predict()
-        filtered_pos = kf.update(measurement)
-        filtered_positions.append([t, *filtered_pos])
+        # 更新
+        filtered_state = kf.update(pos)
+        # 保存完整状态（位置和速度）
+        full_state = np.concatenate(([t], filtered_state, kf.x[3:]))
+        filtered_states.append(full_state)
     
-    return np.array(filtered_positions)
+    return np.array(filtered_states)
 
-def analyze_noise_reduction(original_data, filtered_data):
+def analyze_noise_reduction(original_data, filtered_data, simulated_data=None):
     """
-    分析降噪效果。
+    分析降噪效果和模拟精度。
     
-    :param original_data: 数组，结构为[[t,x,y,z],...]，原始数据
-    :param filtered_data: 数组，结构为[[t,x,y,z],...]，滤波后数据
+    :param original_data: 数组，原始位置数据 [x,y,z]
+    :param filtered_data: 数组，滤波后位置数据 [x,y,z]
+    :param simulated_data: 数组，可选，模拟位置数据 [x,y,z]
     :return: 包含统计信息的字典
     """
     # 计算原始数据和滤波后数据之间的差异
-    # 注意：跳过时间列（索引0），只比较xyz坐标（索引1:4）
-    differences = np.sqrt(np.sum((original_data[:, 1:4] - filtered_data[:, 1:4])**2, axis=1))
+    filter_differences = np.sqrt(np.sum((original_data - filtered_data)**2, axis=1))
     
-    # 计算统计指标
+    # 初始化统计指标
     stats = {
-        'mean_difference': np.mean(differences),
-        'max_difference': np.max(differences),
-        'std_difference': np.std(differences)
+        '原始-滤波平均差异': np.mean(filter_differences),
+        '原始-滤波最大差异': np.max(filter_differences),
+        '原始-滤波标准差': np.std(filter_differences)
     }
+    
+    # 如果提供了模拟数据，计算额外的统计信息
+    if simulated_data is not None:
+        # 计算模拟数据与原始数据的差异
+        sim_orig_differences = np.sqrt(np.sum((original_data - simulated_data)**2, axis=1))
+        stats.update({
+            '原始-模拟平均差异': np.mean(sim_orig_differences),
+            '原始-模拟最大差异': np.max(sim_orig_differences),
+            '原始-模拟标准差': np.std(sim_orig_differences)
+        })
+        
+        # 计算模拟数据与滤波数据的差异
+        sim_filter_differences = np.sqrt(np.sum((filtered_data - simulated_data)**2, axis=1))
+        stats.update({
+            '滤波-模拟平均差异': np.mean(sim_filter_differences),
+            '滤波-模拟最大差异': np.max(sim_filter_differences),
+            '滤波-模拟标准差': np.std(sim_filter_differences)
+        })
+        
+        # 计算相对改进百分比
+        improvement = (np.mean(sim_orig_differences) - np.mean(sim_filter_differences)) / np.mean(sim_orig_differences) * 100
+        stats['模型改进百分比'] = improvement
     
     return stats

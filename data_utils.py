@@ -26,13 +26,39 @@ def read_csv(file_path='ps1.csv'):
             raise ValueError("CSV文件必须包含三列：x,y,z")
         
         # 生成时间数组（假设采样间隔为0.1秒）
-        t = np.arange(len(xyz_data)) * 0.1
+        t = np.arange(len(xyz_data)) * 0.15
         
         # 组合时间和坐标数据
         return np.column_stack([t, xyz_data])
         
     except Exception as e:
         raise Exception(f"读取CSV文件时出错：{str(e)}")
+
+def get_initial_conditions(data):
+    """
+    从轨迹数据中提取初始条件，包括初始位置和速度。
+    
+    :param data: 数组，结构为[[t,x,y,z],...]
+    :return: 数组，包含[t_0, x_0, y_0, z_0, v_x0, v_y0, v_z0]
+    """
+    if len(data) < 2:
+        raise ValueError("需要至少两个数据点来计算初始速度")
+    
+    # 提取初始位置
+    t_0, x_0, y_0, z_0 = data[0]
+    
+    # 计算初始速度（通过前两个点的差分）
+    t_1, x_1, y_1, z_1 = data[1]
+    dt = t_1 - t_0
+    
+    if dt <= 0:
+        raise ValueError("时间差必须为正值")
+    
+    v_x0 = (x_1 - x_0) / dt
+    v_y0 = (y_1 - y_0) / dt
+    v_z0 = (z_1 - z_0) / dt
+    
+    return np.array([t_0, x_0, y_0, z_0, v_x0, v_y0, v_z0])
 
 class KalmanFilter:
     """

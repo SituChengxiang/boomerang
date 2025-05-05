@@ -1,6 +1,11 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
+import matplotlib
+
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑体
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 def plot_data_points(data, title="3D Data Points", new_figure=True, save_path=None):
     """

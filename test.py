@@ -13,11 +13,14 @@ def main():
     
     # 分析降噪效果
     print("分析降噪效果...")
-    noise_stats = analyze_noise_reduction(original_data, filtered_data)
+    noise_stats = analyze_noise_reduction(
+        original_data[:, 1:4],     # 原始位置数据
+        filtered_data[:, 1:4]      # 滤波后位置数据
+    )
     print("\n降噪效果统计：")
-    print(f"平均偏差: {noise_stats['mean_difference']:.6f} m")
-    print(f"最大偏差: {noise_stats['max_difference']:.6f} m")
-    print(f"标准差: {noise_stats['std_difference']:.6f} m")
+    print(f"平均差异: {noise_stats['原始-滤波平均差异']:.6f} m")
+    print(f"最大差异: {noise_stats['原始-滤波最大差异']:.6f} m")
+    print(f"标准差: {noise_stats['原始-滤波标准差']:.6f} m")
     
     # 绘制原始数据
     print("\n绘制原始数据可视化...")

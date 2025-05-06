@@ -91,11 +91,17 @@ def main():
         fitted_data = combined_function(t_data, *params)
         
         # 分析误差
-        stats = analyze_noise_reduction(data, fitted_data)
+        stats = analyze_noise_reduction(
+            data[:, 1:4],          # 原始位置数据
+            fitted_data[:, 1:4],    # 拟合位置数据
+            fitted_data[:, 1:4]     # 同时作为模拟数据进行比较
+        )
         print("\n拟合误差统计:")
-        print(f"平均偏差: {stats['mean_difference']:.6f} m")
-        print(f"最大偏差: {stats['max_difference']:.6f} m")
-        print(f"标准差: {stats['std_difference']:.6f} m")
+        print("原始数据与拟合数据比较:")
+        print(f"   平均差异: {stats['原始-模拟平均差异']:.6f} m")
+        print(f"   最大差异: {stats['原始-模拟最大差异']:.6f} m")
+        print(f"   标准差: {stats['原始-模拟标准差']:.6f} m")
+        print(f"\n拟合改进: {stats['模型改进百分比']:.1f}%")
         
         # 绘制对比图
         print("\n绘制拟合结果...")

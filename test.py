@@ -1,5 +1,5 @@
 import numpy as np
-from data_utils import read_csv, apply_kalman_filter, analyze_noise_reduction
+from data_utils import read_csv, apply_kalman_filter, analyze_noise_reduction, export_filtered_data
 from plot_utils import plot_data_points, plot_curve, plot_comparison
 
 def main():
@@ -31,6 +31,9 @@ def main():
     print("\n绘制滤波后数据可视化...")
     plot_data_points(filtered_data, title="滤波后的回旋镖轨迹数据点")
     plot_comparison(filtered_data, title="滤波后的回旋镖轨迹分析")
+
+    print("\n8. 导出滤波后的数据...")
+    export_filtered_data(filtered_data)
 
 if __name__ == "__main__":
     main()

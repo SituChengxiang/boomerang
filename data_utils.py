@@ -1,4 +1,5 @@
 import numpy as np
+import csv
 
 params_fixed = {
     'a': 0.15,        # 翼展 (m)
@@ -212,3 +213,23 @@ def analyze_noise_reduction(original_data, filtered_data, simulated_data=None):
         stats['模型改进百分比'] = improvement
     
     return stats
+
+
+def export_filtered_data(filtered_data, output_file='betterps.csv'):
+    """
+    导出滤波后的数据到CSV文件。
+    
+    :param filtered_data: 数组，结构为 [t, x, y, z, vx, vy, vz]
+    :param output_file: 输出文件名，默认为 'betterps.csv'
+    """
+    try:
+        with open(output_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            # 写入表头
+            writer.writerow(['t', 'x', 'y', 'z'])
+            # 写入数据
+            for row in filtered_data:
+                writer.writerow(row[:4])  # 只导出 t, x, y, z 列
+        print(f"滤波后的数据已成功导出到 {output_file}")
+    except Exception as e:
+        print(f"导出数据时出错：{e}")

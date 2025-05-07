@@ -209,3 +209,98 @@ def plot_trajectory_analysis(data, title="轨迹分析", save_path=None):
     
     plt.show()
     return fig
+
+
+def plot_dynamic_parameters(times, solves, save_path='boomerang_params.png'):
+    """
+    绘制回旋镖动力学参数（扭矩系数、升力系数和阻力系数）随时间的变化。
+    
+    :param times: 时间数组
+    :param solves: 解数组，结构为[[D, CL, CD], ...]
+    :param save_path: 保存图像的路径
+    :return: 图形对象
+    """
+    from scipy import stats
+    import numpy as np
+    
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12))
+    param_names = ['扭矩系数 (D)', '升力系数 (CL)', '阻力系数 (CD)']
+    
+    for i, (ax, name) in enumerate(zip(axes, param_names)):
+        ax.plot(times, solves[:, i], 'o-', label=f'原始{name}')
+        ax.axhline(y=np.average(solves[:, i]), color='r', linestyle='-', label='平均值')
+        
+        # 添加去除异常值后的平均值
+        param_z = np.abs(stats.zscore(solves[:, i]))
+        clean_data = solves[param_z < 3, i]
+        ax.axhline(y=np.average(clean_data), color='g', linestyle='--', label='净化平均值')
+        
+        ax.set_xlabel('时间 (s)')
+        ax.set_ylabel(name)
+        ax.set_title(f'{name}随时间的变化')
+        ax.grid(True)
+        ax.legend()
+    
+    plt.suptitle('回旋镖动力学参数随时间的变化')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    plt.show()
+    return fig
+
+
+def plot_advdynamic_parameters(times, solves, skip_points=0, save_path='boomerang_params.png'):
+    """
+    绘制回旋镖动力学参数（扭矩系数、升力系数和阻力系数）随时间的变化。
+    
+    :param times: 时间数组
+    :param solves: 解数组，结构为[[D, CL, CD], ...]
+    :param skip_points: 计算统计量时忽略的起始点数量
+    :param save_path: 保存图像的路径
+    :return: 图形对象
+    """
+    from scipy import stats
+    import numpy as np
+    
+    # 分离有效数据和忽略的数据
+    times_valid = times[skip_points:]
+    solves_valid = solves[skip_points:]
+    
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12))
+    param_names = ['扭矩系数 (D)', '升力系数 (CL)', '阻力系数 (CD)']
+    
+    for i, (ax, name) in enumerate(zip(axes, param_names)):
+        # 绘制完整数据，但区分有效点和忽略的点
+        if skip_points > 0:
+            ax.plot(times[:skip_points], solves[:skip_points, i], 'rx', markersize=8, 
+                   label=f'忽略的前{skip_points}个点')
+        
+        # 绘制有效数据点
+        ax.plot(times_valid, solves_valid[:, i], 'bo-', label=f'有效{name}数据')
+        
+        # 计算并显示平均线 (只使用有效数据)
+        ax.axhline(y=np.average(solves_valid[:, i]), color='r', linestyle='-', 
+                  label='平均值 (有效数据)')
+        
+        # 添加去除异常值后的平均值
+        param_z = np.abs(stats.zscore(solves_valid[:, i]))
+        clean_data = solves_valid[param_z < 3, i]
+        ax.axhline(y=np.average(clean_data), color='g', linestyle='--', 
+                  label='净化平均值 (Z-score < 3)')
+        
+        ax.set_xlabel('时间 (s)')
+        ax.set_ylabel(name)
+        ax.set_title(f'{name}随时间的变化')
+        ax.grid(True)
+        ax.legend()
+    
+    plt.suptitle('回旋镖动力学参数随时间的变化')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    plt.show()
+    return fig

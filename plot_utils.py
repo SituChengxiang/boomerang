@@ -7,7 +7,76 @@ import matplotlib
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
-def plot_data_points(data, title="3D Data Points", new_figure=True, save_path=None):
+def plot_fourier_fit(data, fitted_funcs, title="傅里叶拟合结果", save_path=None):
+    """
+    绘制原始数据点和傅里叶拟合曲线的对比图。
+    
+    :param data: 数组，结构为[[t,x,y,z],...]
+    :param fitted_funcs: 三个拟合函数的列表 [x(t), y(t), z(t)]
+    :param title: 图表标题
+    :param save_path: 保存图像的路径（可选）
+    :return: 包含所有子图的figure对象
+    """
+    fig = plt.figure(figsize=(12, 10))
+    
+    # 提取数据
+    t = data[:, 0]
+    xyz = data[:, 1:4]
+    
+    # 生成更密集的时间点用于绘制平滑曲线
+    t_smooth = np.linspace(t.min(), t.max(), 500)
+    xyz_fit = np.array([f(t_smooth) for f in fitted_funcs]).T
+    
+    # 左上角：3D视图
+    ax1 = fig.add_subplot(221, projection='3d')
+    ax1.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c='r', marker='o', label='数据点')
+    ax1.plot(xyz_fit[:, 0], xyz_fit[:, 1], xyz_fit[:, 2], 'b-', label='拟合曲线')
+    ax1.set_xlabel('X (m)')
+    ax1.set_ylabel('Y (m)')
+    ax1.set_zlabel('Z (m)')
+    ax1.set_title('3D视图')
+    ax1.legend()
+    
+    # 右上角：z-t图
+    ax2 = fig.add_subplot(222)
+    ax2.plot(t, xyz[:, 2], 'ro', label='数据点')
+    ax2.plot(t_smooth, fitted_funcs[2](t_smooth), 'b-', label='拟合曲线')
+    ax2.set_xlabel('时间 (s)')
+    ax2.set_ylabel('Z (m)')
+    ax2.set_title('Z vs 时间')
+    ax2.legend()
+    ax2.grid(True)
+    
+    # 左下角：y-t图
+    ax3 = fig.add_subplot(223)
+    ax3.plot(t, xyz[:, 1], 'ro', label='数据点')
+    ax3.plot(t_smooth, fitted_funcs[1](t_smooth), 'b-', label='拟合曲线')
+    ax3.set_xlabel('时间 (s)')
+    ax3.set_ylabel('Y (m)')
+    ax3.set_title('Y vs 时间')
+    ax3.legend()
+    ax3.grid(True)
+    
+    # 右下角：x-t图
+    ax4 = fig.add_subplot(224)
+    ax4.plot(t, xyz[:, 0], 'ro', label='数据点')
+    ax4.plot(t_smooth, fitted_funcs[0](t_smooth), 'b-', label='拟合曲线')
+    ax4.set_xlabel('时间 (s)')
+    ax4.set_ylabel('X (m)')
+    ax4.set_title('X vs 时间')
+    ax4.legend()
+    ax4.grid(True)
+    
+    plt.suptitle(title)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    plt.show()
+    return fig
+
+def plot_3d_points(data, title="3D轨迹数据点", new_figure=True, save_path=None):
     """
     绘制3D数据点。
     
@@ -27,7 +96,7 @@ def plot_data_points(data, title="3D Data Points", new_figure=True, save_path=No
     # 提取x,y,z坐标
     xyz = data[:, 1:4]
     
-    ax.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c='r', marker='o', label='Data Points')
+    ax.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c='r', marker='o', label='数据点')
     ax.set_xlabel('X (m)')
     ax.set_ylabel('Y (m)')
     ax.set_zlabel('Z (m)')
@@ -35,14 +104,14 @@ def plot_data_points(data, title="3D Data Points", new_figure=True, save_path=No
     ax.legend()
     
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     
     if new_figure:
         plt.show()
         return fig, ax
     return ax
 
-def plot_curve(data, title="3D Curve", new_figure=True, save_path=None):
+def plot_3d_curve(data, title="3D轨迹曲线", new_figure=True, save_path=None):
     """
     绘制3D曲线。
     
@@ -62,7 +131,7 @@ def plot_curve(data, title="3D Curve", new_figure=True, save_path=None):
     # 提取x,y,z坐标
     xyz = data[:, 1:4]
     
-    ax.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], 'b-', label='Fit Curve')
+    ax.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], 'b-', label='轨迹曲线')
     ax.set_xlabel('X (m)')
     ax.set_ylabel('Y (m)')
     ax.set_zlabel('Z (m)')
@@ -70,16 +139,16 @@ def plot_curve(data, title="3D Curve", new_figure=True, save_path=None):
     ax.legend()
     
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     
     if new_figure:
         plt.show()
         return fig, ax
     return ax
 
-def plot_comparison(data, title="Comparison", save_path=None):
+def plot_trajectory_analysis(data, title="轨迹分析", save_path=None):
     """
-    绘制数据的综合对比图，包括3D视图和三个时间序列图。
+    绘制轨迹的综合分析图，包括3D视图和三个时间序列图。
     
     :param data: 数组，结构为[[t,x,y,z],...]
     :param title: 图表标题
@@ -94,41 +163,41 @@ def plot_comparison(data, title="Comparison", save_path=None):
     
     # 左上角：3D视图
     ax1 = fig.add_subplot(221, projection='3d')
-    ax1.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c='r', marker='o', label='Data Points')
-    ax1.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], 'b-', label='Fit Curve')
+    ax1.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c='r', marker='o', label='数据点')
+    ax1.plot(xyz[:, 0], xyz[:, 1], xyz[:, 2], 'b-', alpha=0.5, label='轨迹曲线')
     ax1.set_xlabel('X (m)')
     ax1.set_ylabel('Y (m)')
     ax1.set_zlabel('Z (m)')
-    ax1.set_title('3D View')
+    ax1.set_title('3D轨迹')
     ax1.legend()
     
     # 右上角：z-t图
     ax2 = fig.add_subplot(222)
-    ax2.plot(t, xyz[:, 2], 'ro', label='Data Points')
-    ax2.plot(t, xyz[:, 2], 'b-', label='Fit Curve')
-    ax2.set_xlabel('Time (s)')
+    ax2.plot(t, xyz[:, 2], 'ro', label='数据点')
+    ax2.plot(t, xyz[:, 2], 'b-', alpha=0.5, label='轨迹曲线')
+    ax2.set_xlabel('时间 (s)')
     ax2.set_ylabel('Z (m)')
-    ax2.set_title('Z vs Time')
+    ax2.set_title('Z坐标随时间变化')
     ax2.legend()
     ax2.grid(True)
     
     # 左下角：y-t图
     ax3 = fig.add_subplot(223)
-    ax3.plot(t, xyz[:, 1], 'ro', label='Data Points')
-    ax3.plot(t, xyz[:, 1], 'b-', label='Fit Curve')
-    ax3.set_xlabel('Time (s)')
+    ax3.plot(t, xyz[:, 1], 'ro', label='数据点')
+    ax3.plot(t, xyz[:, 1], 'b-', alpha=0.5, label='轨迹曲线')
+    ax3.set_xlabel('时间 (s)')
     ax3.set_ylabel('Y (m)')
-    ax3.set_title('Y vs Time')
+    ax3.set_title('Y坐标随时间变化')
     ax3.legend()
     ax3.grid(True)
     
     # 右下角：x-t图
     ax4 = fig.add_subplot(224)
-    ax4.plot(t, xyz[:, 0], 'ro', label='Data Points')
-    ax4.plot(t, xyz[:, 0], 'b-', label='Fit Curve')
-    ax4.set_xlabel('Time (s)')
+    ax4.plot(t, xyz[:, 0], 'ro', label='数据点')
+    ax4.plot(t, xyz[:, 0], 'b-', alpha=0.5, label='轨迹曲线')
+    ax4.set_xlabel('时间 (s)')
     ax4.set_ylabel('X (m)')
-    ax4.set_title('X vs Time')
+    ax4.set_title('X坐标随时间变化')
     ax4.legend()
     ax4.grid(True)
     
@@ -136,7 +205,7 @@ def plot_comparison(data, title="Comparison", save_path=None):
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     
     plt.show()
     return fig

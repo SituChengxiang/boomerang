@@ -1,12 +1,11 @@
 import numpy as np
 from data_utils import read_csv, apply_kalman_filter, analyze_noise_reduction, export_filtered_data
-from plot_utils import plot_data_points, plot_curve, plot_comparison
+from plot_utils import plot_3d_points, plot_3d_curve, plot_trajectory_analysis
 
 def main():
     # 读取原始数据
     print("读取原始数据...")
-    original_data = read_csv()  # 默认读取ps1.csv
-    
+    original_data = read_csv()  # 默认读取ps1.csv1
     # 应用卡尔曼滤波进行降噪
     print("应用卡尔曼滤波进行降噪...")
     filtered_data = apply_kalman_filter(original_data)
@@ -24,16 +23,53 @@ def main():
     
     # 绘制原始数据
     print("\n绘制原始数据可视化...")
-    plot_data_points(original_data, title="原始回旋镖轨迹数据点")
-    plot_comparison(original_data, title="原始回旋镖轨迹分析")
+    plot_3d_points(original_data, title="原始回旋镖轨迹数据点")
+    plot_trajectory_analysis(original_data, title="原始回旋镖轨迹分析")
     
     # 绘制滤波后的数据
     print("\n绘制滤波后数据可视化...")
-    plot_data_points(filtered_data, title="滤波后的回旋镖轨迹数据点")
-    plot_comparison(filtered_data, title="滤波后的回旋镖轨迹分析")
+    plot_3d_points(filtered_data, title="滤波后的回旋镖轨迹数据点")
+    plot_trajectory_analysis(filtered_data, title="滤波后的回旋镖轨迹分析")
 
     print("\n8. 导出滤波后的数据...")
     export_filtered_data(filtered_data)
 
+def main_with_curve_fit():
+    """使用傅里叶-多项式方法进行曲线拟合"""
+    from curve_fit_utils import fit_3d_curve
+    from plot_utils import plot_fourier_fit
+    
+    # 读取滤波后的数据
+    print("读取滤波后的数据...")
+    filtered_data = read_csv("betterps.csv")
+    origin_data = read_csv("ps.csv")
+    
+    # 进行曲线拟合
+    print("\n执行傅里叶-多项式拟合...")
+    coeffs, fitted_funcs, expressions = fit_3d_curve(filtered_data, n_fourier=3, n_poly=2)
+    
+    # 打印曲线解析式
+    print("\n拟合曲线的解析式：")
+    for expr in expressions:
+        print(expr)
+    
+    # 绘制拟合结果
+    print("\n绘制拟合结果...")
+    plot_fourier_fit(origin_data, fitted_funcs, 
+                    title="回旋镖轨迹：原始数据和拟合曲线",
+                    save_path="fit_results_fourier_polynomial.png")
+    
+    print("\n拟合结果已保存到 fit_results_fourier_polynomial.png")
+
 if __name__ == "__main__":
-    main()
+    print("请选择要运行的功能：")
+    print("1. 原始数据处理和滤波")
+    print("2. 曲线拟合")
+    choice = input("请输入选项（1或2）：")
+    
+    if choice == "1":
+        main()
+    elif choice == "2":
+        main_with_curve_fit()
+    else:
+        print("无效的选项！")

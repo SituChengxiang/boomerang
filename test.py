@@ -35,7 +35,7 @@ def main():
     export_filtered_data(filtered_data)
 
 def main_with_curve_fit():
-    """使用傅里叶-多项式方法进行曲线拟合"""
+    """使用六阶傅里叶-三阶多项式方法进行曲线拟合"""
     from curve_fit_utils import fit_3d_curve
     from plot_utils import plot_fourier_fit
     
@@ -45,8 +45,8 @@ def main_with_curve_fit():
     origin_data = read_csv("ps.csv")
     
     # 进行曲线拟合
-    print("\n执行傅里叶-多项式拟合...")
-    coeffs, fitted_funcs, expressions = fit_3d_curve(filtered_data, n_fourier=3, n_poly=2)
+    print("\n执行六阶傅里叶-三阶多项式拟合...")
+    coeffs, fitted_funcs, expressions = fit_3d_curve(filtered_data, n_fourier=6, n_poly=3)
     
     # 打印曲线解析式
     print("\n拟合曲线的解析式：")

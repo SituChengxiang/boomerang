@@ -1,16 +1,17 @@
 import numpy as np
 from scipy.optimize import curve_fit
 
-def fourier_polynomial_basis(t, n_fourier=3, n_poly=2):
+def fourier_polynomial_basis(t, n_fourier=6, n_poly=3):
     """
-    生成傅里叶-多项式基函数。
+    生成傅里叶-多项式混合基函数。
     
     :param t: 时间数组
-    :param n_fourier: 傅里叶项数
-    :param n_poly: 多项式阶数
+    :param n_fourier: 傅里叶项数，默认为6
+    :param n_poly: 多项式阶数，默认为3
     :return: 基函数矩阵
     """
     basis = []
+    
     # 添加多项式项
     for i in range(n_poly + 1):
         basis.append(t**i)
@@ -21,13 +22,13 @@ def fourier_polynomial_basis(t, n_fourier=3, n_poly=2):
     
     return np.array(basis).T
 
-def fit_3d_curve(data, n_fourier=3, n_poly=2):
+def fit_3d_curve(data, n_fourier=6, n_poly=3):
     """
-    对3D轨迹数据进行傅里叶-多项式拟合。
+    对3D轨迹数据进行六阶傅里叶-多项式拟合。
     
     :param data: 数组，结构为[[t,x,y,z],...]
-    :param n_fourier: 傅里叶项数
-    :param n_poly: 多项式阶数
+    :param n_fourier: 傅里叶项数，默认为6
+    :param n_poly: 多项式阶数，默认为3
     :return: (系数数组, 拟合函数, 解析式)
     """
     t = data[:, 0]
@@ -57,9 +58,10 @@ def fit_3d_curve(data, n_fourier=3, n_poly=2):
         
         # 生成解析式
         terms = []
+        
         # 多项式项
         for j in range(n_poly + 1):
-            if abs(coeff[j]) > 1e-10:  # 忽略接近0的系数
+            if abs(coeff[j]) > 1e-10:
                 if j == 0:
                     terms.append(f"{coeff[j]:.6f}")
                 elif j == 1:
@@ -68,13 +70,12 @@ def fit_3d_curve(data, n_fourier=3, n_poly=2):
                     terms.append(f"{coeff[j]:.6f}t^{j}")
         
         # 傅里叶项
-        idx = n_poly + 1
         for j in range(n_fourier):
+            idx = j * 2 + n_poly + 1
             if abs(coeff[idx]) > 1e-10:
                 terms.append(f"{coeff[idx]:.6f}sin({2*(j+1)}πt)")
             if abs(coeff[idx+1]) > 1e-10:
                 terms.append(f"{coeff[idx+1]:.6f}cos({2*(j+1)}πt)")
-            idx += 2
         
         expressions.append(f"{coord}(t) = " + " + ".join(terms))
     

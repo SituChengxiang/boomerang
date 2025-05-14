@@ -1,4 +1,4 @@
-# 中国大学生实验学术竞赛（CUPT） Invent Yourself: Paper Boomerang 代码参考
+# 中国大学生物理学术竞赛（CUPT） Invent Yourself: Paper Boomerang 代码参考
 
 CUPT让我们相遇于此吧（  
 这个仓库里有：  

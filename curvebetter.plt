@@ -23,6 +23,6 @@ print "First few lines of ps1.csv:"
 !head -n 5 betterps1.csv
 
 # 绘图，此时会在交互式窗口中显示，可以旋转拖动
-splot 'ps1.csv' skip 1 using 1:2:3 with points pt 7 ps 1.0 lc rgb "purple" title 'Data Points'
+splot 'betterps1.csv' skip 1 using 1:2:3 with points pt 7 ps 1.0 lc rgb "purple" title 'Data Points'
 
 pause mouse close "Click on the plot to close it."

@@ -25,7 +25,7 @@ fn read_csv(file_path: &str) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>),
 
 fn solve_parameters(t: &[f64], data: &[f64], model_type: &str) -> Result<Array1<f64>, Box<dyn std::error::Error>> {
     let n = t.len();
-    let (mut a, b) = match model_type {
+    let (a, b) = match model_type {
         "x" => {
             let mut a_x = Array2::<f64>::zeros((n, 5));
             let mut b_x = Array1::<f64>::zeros(n);
@@ -73,11 +73,10 @@ fn solve_parameters(t: &[f64], data: &[f64], model_type: &str) -> Result<Array1<
         _ => return Err("Invalid model type".into()),
     };
 
-    // 使用 SVD::compute 正确调用
-    let svd = a.clone().svd(true, true)?;
-    let params = svd.solve(&b)?;
+    // Solve the least squares problem using SVD
+    let params = a.least_squares(&b)?;
 
-    Ok(params)
+    Ok(params.solution)
 }
 
 fn calculate_error(t: &[f64], data: &[f64], params: &Array1<f64>, model_type: &str) -> f64 {
@@ -161,6 +160,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-
-

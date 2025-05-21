@@ -3,8 +3,8 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import matplotlib
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑体
+# 设置中文字体  
+plt.rcParams['font.sans-serif'] = ['LXGW WenKai GB']  # 使用黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 def plot_fourier_fit(data, fitted_funcs, title="傅里叶拟合结果", save_path=None):

@@ -4,8 +4,96 @@ import numpy as np
 import matplotlib
 
 # 设置中文字体  
-plt.rcParams['font.sans-serif'] = ['LXGW WenKai GB']  # 使用黑体
+plt.rcParams['font.sans-serif'] = ['Source Han Sans CN']  # 使用思源黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=None):
+    """
+    绘制两个轨迹的对比图，包括3D视图和三个时间序列图。
+    
+    :param data1: 第一个轨迹数据，数组，结构为[[t,x,y,z],...]
+    :param data2: 第二个轨迹数据，数组，结构为[[t,x,y,z],...]
+    :param title: 图表标题
+    :param save_path: 保存图像的路径（可选）
+    :return: 包含所有子图的figure对象
+    """
+    fig = plt.figure(figsize=(12, 10))
+    
+    # 提取时间和坐标数据
+    t1 = data1[:, 0]
+    xyz1 = data1[:, 1:4]
+    
+    t2 = data2[:, 0]
+    xyz2 = data2[:, 1:4]
+    
+    # 左上角：3D视图
+    ax1 = fig.add_subplot(221, projection='3d')
+    # 绘制第一个轨迹
+    ax1.scatter(xyz1[:, 0], xyz1[:, 1], xyz1[:, 2], c='#145ca0', marker='o', label='轨迹1数据点')
+    ax1.plot(xyz1[:, 0], xyz1[:, 1], xyz1[:, 2], c='#004f989d', alpha=0.7, label='轨迹1曲线')
+    # 绘制第二个轨迹
+    ax1.scatter(xyz2[:, 0], xyz2[:, 1], xyz2[:, 2], c='#E74C3C', marker='o', label='轨迹2数据点')
+    ax1.plot(xyz2[:, 0], xyz2[:, 1], xyz2[:, 2], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    ax1.set_xlabel('X (m)')
+    ax1.set_ylabel('Y (m)')
+    ax1.set_zlabel('Z (m)')
+    ax1.set_title('3D轨迹对比')
+    ax1.legend()
+    
+    # 右上角：z-t图
+    ax2 = fig.add_subplot(222)
+    # 绘制第一个轨迹
+    ax2.scatter(t1, xyz1[:, 2], c='#145ca0', marker='o', label='轨迹1数据点')
+    ax2.plot(t1, xyz1[:, 2], c='#004f989d', alpha=0.7, label='轨迹1曲线')
+    # 绘制第二个轨迹
+    ax2.scatter(t2, xyz2[:, 2], c='#E74C3C', marker='o', label='轨迹2数据点')
+    ax2.plot(t2, xyz2[:, 2], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    ax2.set_xlabel('时间 (s)')
+    ax2.set_ylabel('Z (m)')
+    ax2.set_title('Z坐标随时间变化')
+    ax2.legend()
+    ax2.grid(True)
+    
+    # 左下角：y-t图
+    ax3 = fig.add_subplot(223)
+    # 绘制第一个轨迹
+    ax3.scatter(t1, xyz1[:, 1], c='#145ca0', marker='o', label='轨迹1数据点')
+    ax3.plot(t1, xyz1[:, 1], c='#004f989d', alpha=0.7, label='轨迹1曲线')
+    # 绘制第二个轨迹
+    ax3.scatter(t2, xyz2[:, 1], c='#E74C3C', marker='o', label='轨迹2数据点')
+    ax3.plot(t2, xyz2[:, 1], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    ax3.set_xlabel('时间 (s)')
+    ax3.set_ylabel('Y (m)')
+    ax3.set_title('Y坐标随时间变化')
+    ax3.legend()
+    ax3.grid(True)
+    
+    # 右下角：x-t图
+    ax4 = fig.add_subplot(224)
+    # 绘制第一个轨迹
+    ax4.scatter(t1, xyz1[:, 0], c='#145ca0', marker='o', label='轨迹1数据点')
+    ax4.plot(t1, xyz1[:, 0], c='#004f989d', alpha=0.7, label='轨迹1曲线')
+    # 绘制第二个轨迹
+    ax4.scatter(t2, xyz2[:, 0], c='#E74C3C', marker='o', label='轨迹2数据点')
+    ax4.plot(t2, xyz2[:, 0], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    ax4.set_xlabel('时间 (s)')
+    ax4.set_ylabel('X (m)')
+    ax4.set_title('X坐标随时间变化')
+    ax4.legend()
+    ax4.grid(True)
+    
+    plt.suptitle(title)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    
+    plt.show()
+    return fig
 
 def plot_fourier_fit(data, fitted_funcs, title="傅里叶拟合结果", save_path=None):
     """

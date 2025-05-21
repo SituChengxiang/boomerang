@@ -61,15 +61,53 @@ def main_with_curve_fit():
     
     print("\n拟合结果已保存到 fit_results_fourier_polynomial.png")
 
+def main_with_dual_trajectories():
+    """比较两个轨迹数据"""
+    from plot_utils import plot_dual_trajectories
+    
+    # 读取第一个轨迹数据
+    print("读取第一个轨迹数据(ps.csv)...")
+    data1_original = read_csv("ps.csv")
+    
+    # 读取第二个轨迹数据
+    print("读取第二个轨迹数据(ps2.csv)...")
+    data2_original = read_csv("ps2.csv")
+    
+    # 应用卡尔曼滤波进行降噪
+    print("对第一个轨迹应用卡尔曼滤波...")
+    data1_filtered = apply_kalman_filter(data1_original)
+    
+    print("对第二个轨迹应用卡尔曼滤波...")
+    data2_filtered = apply_kalman_filter(data2_original)
+    
+    # 绘制双轨迹对比图（原始数据）
+    print("\n绘制原始轨迹对比图...")
+    plot_dual_trajectories(data1_original, data2_original, 
+                          title="回旋镖轨迹对比(原始数据)",
+                          save_path="trajectory_comparison_original.png")
+    
+    print("原始对比图已保存到 trajectory_comparison_original.png")
+    
+    # 绘制双轨迹对比图（滤波后数据）
+    print("\n绘制滤波后轨迹对比图...")
+    plot_dual_trajectories(data1_filtered, data2_filtered, 
+                          title="回旋镖轨迹对比(滤波后)",
+                          save_path="trajectory_comparison_filtered.png")
+    
+    print("滤波后对比图已保存到 trajectory_comparison_filtered.png")
+
 if __name__ == "__main__":
     print("请选择要运行的功能：")
     print("1. 原始数据处理和滤波")
     print("2. 曲线拟合")
-    choice = input("请输入选项（1或2）：")
+    print("3. 轨迹对比")
+    choice = input("请输入选项（1、2或3）：")
     
     if choice == "1":
         main()
     elif choice == "2":
         main_with_curve_fit()
+    elif choice == "3":
+        main_with_dual_trajectories()
     else:
         print("无效的选项！")

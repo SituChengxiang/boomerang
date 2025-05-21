@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.optimize as opt
 from scipy import stats
+import csv
 
 # 导入数据处理工具和绘图工具
 from data_utils import read_csv, params_fixed, get_initial_conditions
@@ -23,8 +24,8 @@ def formula(ax, ay, az, v, vx, vy, vz):
     def equation(var):
         [D, CL, CD] = var
         # f1, f2, f3 = 0 即得原公式
-        f1 = ax - D * rho * CL * omega * v * (a**3) * d * vy / (2*I) + prm * CD * v * vx
-        f2 = ay + prm * v * vy * (CL - CD)
+        f1 = ax - D * rho * CL * omega * v * (a**3) * d * vy / (2*I) + prm * 0.1* CD * v * vx
+        f2 = ay + prm * v * vy * (0.1* CL - CD)
         f3 = az - prm * v * vz * (CL - CD*0.1 ) + g
         return [f1, f2, f3]
     return equation    
@@ -97,6 +98,22 @@ def main():
     # 绘制结果，直接使用有效数据点，不再标记被忽略的点
     plot_dynamic_parameters(t_valid, solves_valid, save_path='boomerang_params.png')
     print("参数变化图已保存到 'boomerang_params.png'")
+
+# 将计算结果保存到CSV文件
+    print("保存计算结果到 arg.csv...")
+    with open('arg.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        # 写入表头
+        writer.writerow(['t', 'c_l', 'c_d', 'd'])
+        # 写入数据
+        for i in range(len(t_valid)):
+            writer.writerow([
+                t_valid[i],                # 时间 t
+                solves_valid[i][1],        # CL (c_l)
+                solves_valid[i][2],        # CD (c_d)
+                solves_valid[i][0]         # D (d)
+            ])
+    print("计算结果已保存到 arg.csv")
 
 if __name__ == "__main__":
     main()

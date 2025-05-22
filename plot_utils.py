@@ -7,7 +7,8 @@ import matplotlib
 plt.rcParams['font.sans-serif'] = ['Source Han Sans CN']  # 使用思源黑体
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
-def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=None):
+def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=None, 
+                          fitted_funcs1=None, fitted_funcs2=None):
     """
     绘制两个轨迹的对比图，包括3D视图和三个时间序列图。
     
@@ -15,6 +16,8 @@ def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=N
     :param data2: 第二个轨迹数据，数组，结构为[[t,x,y,z],...]
     :param title: 图表标题
     :param save_path: 保存图像的路径（可选）
+    :param fitted_funcs1: 第一个轨迹的拟合函数列表 [fx, fy, fz]（可选）
+    :param fitted_funcs2: 第二个轨迹的拟合函数列表 [fx, fy, fz]（可选）
     :return: 包含所有子图的figure对象
     """
     fig = plt.figure(figsize=(12, 10))
@@ -26,14 +29,34 @@ def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=N
     t2 = data2[:, 0]
     xyz2 = data2[:, 1:4]
     
+    # 为拟合曲线创建更密集的时间点
+    if fitted_funcs1 is not None or fitted_funcs2 is not None:
+        t1_dense = np.linspace(t1.min(), t1.max(), 200)
+        t2_dense = np.linspace(t2.min(), t2.max(), 200)
+        
+        # 计算拟合曲线点
+        if fitted_funcs1 is not None:
+            x1_fit = fitted_funcs1[0](t1_dense)
+            y1_fit = fitted_funcs1[1](t1_dense)
+            z1_fit = fitted_funcs1[2](t1_dense)
+        
+        if fitted_funcs2 is not None:
+            x2_fit = fitted_funcs2[0](t2_dense)
+            y2_fit = fitted_funcs2[1](t2_dense)
+            z2_fit = fitted_funcs2[2](t2_dense)
+    
     # 左上角：3D视图
     ax1 = fig.add_subplot(221, projection='3d')
     # 绘制第一个轨迹
     ax1.scatter(xyz1[:, 0], xyz1[:, 1], xyz1[:, 2], c='#145ca0', marker='o', label='轨迹1数据点')
-    ax1.plot(xyz1[:, 0], xyz1[:, 1], xyz1[:, 2], c='#004f989d', alpha=0.7, label='轨迹1曲线')
     # 绘制第二个轨迹
     ax1.scatter(xyz2[:, 0], xyz2[:, 1], xyz2[:, 2], c='#E74C3C', marker='o', label='轨迹2数据点')
-    ax1.plot(xyz2[:, 0], xyz2[:, 1], xyz2[:, 2], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    # 绘制拟合曲线
+    if fitted_funcs1 is not None:
+        ax1.plot(x1_fit, y1_fit, z1_fit, c='#0000FF', linewidth=2, label='轨迹1拟合曲线')
+    if fitted_funcs2 is not None:
+        ax1.plot(x2_fit, y2_fit, z2_fit, c='#FF0000', linewidth=2, label='轨迹2拟合曲线')
     
     ax1.set_xlabel('X (m)')
     ax1.set_ylabel('Y (m)')
@@ -45,10 +68,14 @@ def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=N
     ax2 = fig.add_subplot(222)
     # 绘制第一个轨迹
     ax2.scatter(t1, xyz1[:, 2], c='#145ca0', marker='o', label='轨迹1数据点')
-    ax2.plot(t1, xyz1[:, 2], c='#004f989d', alpha=0.7, label='轨迹1曲线')
     # 绘制第二个轨迹
     ax2.scatter(t2, xyz2[:, 2], c='#E74C3C', marker='o', label='轨迹2数据点')
-    ax2.plot(t2, xyz2[:, 2], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    # 绘制拟合曲线
+    if fitted_funcs1 is not None:
+        ax2.plot(t1_dense, z1_fit, c='#0000FF', linewidth=2, label='轨迹1拟合曲线')
+    if fitted_funcs2 is not None:
+        ax2.plot(t2_dense, z2_fit, c='#FF0000', linewidth=2, label='轨迹2拟合曲线')
     
     ax2.set_xlabel('时间 (s)')
     ax2.set_ylabel('Z (m)')
@@ -60,10 +87,14 @@ def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=N
     ax3 = fig.add_subplot(223)
     # 绘制第一个轨迹
     ax3.scatter(t1, xyz1[:, 1], c='#145ca0', marker='o', label='轨迹1数据点')
-    ax3.plot(t1, xyz1[:, 1], c='#004f989d', alpha=0.7, label='轨迹1曲线')
     # 绘制第二个轨迹
     ax3.scatter(t2, xyz2[:, 1], c='#E74C3C', marker='o', label='轨迹2数据点')
-    ax3.plot(t2, xyz2[:, 1], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    # 绘制拟合曲线
+    if fitted_funcs1 is not None:
+        ax3.plot(t1_dense, y1_fit, c='#0000FF', linewidth=2, label='轨迹1拟合曲线')
+    if fitted_funcs2 is not None:
+        ax3.plot(t2_dense, y2_fit, c='#FF0000', linewidth=2, label='轨迹2拟合曲线')
     
     ax3.set_xlabel('时间 (s)')
     ax3.set_ylabel('Y (m)')
@@ -75,10 +106,14 @@ def plot_dual_trajectories(data1, data2, title="双轨迹对比图", save_path=N
     ax4 = fig.add_subplot(224)
     # 绘制第一个轨迹
     ax4.scatter(t1, xyz1[:, 0], c='#145ca0', marker='o', label='轨迹1数据点')
-    ax4.plot(t1, xyz1[:, 0], c='#004f989d', alpha=0.7, label='轨迹1曲线')
     # 绘制第二个轨迹
     ax4.scatter(t2, xyz2[:, 0], c='#E74C3C', marker='o', label='轨迹2数据点')
-    ax4.plot(t2, xyz2[:, 0], c='#9d2f239d', alpha=0.7, label='轨迹2曲线')
+    
+    # 绘制拟合曲线
+    if fitted_funcs1 is not None:
+        ax4.plot(t1_dense, x1_fit, c='#0000FF', linewidth=2, label='轨迹1拟合曲线')
+    if fitted_funcs2 is not None:
+        ax4.plot(t2_dense, x2_fit, c='#FF0000', linewidth=2, label='轨迹2拟合曲线')
     
     ax4.set_xlabel('时间 (s)')
     ax4.set_ylabel('X (m)')

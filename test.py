@@ -35,7 +35,7 @@ def main():
     export_filtered_data(filtered_data)
 
 def main_with_curve_fit():
-    """使用六阶傅里叶-三阶多项式方法进行曲线拟合"""
+    """使用三阶傅里叶-三阶多项式方法进行曲线拟合"""
     from curve_fit_utils import fit_3d_curve
     from plot_utils import plot_fourier_fit
     
@@ -45,8 +45,8 @@ def main_with_curve_fit():
     origin_data = read_csv("ps.csv")
     
     # 进行曲线拟合
-    print("\n执行六阶傅里叶-三阶多项式拟合...")
-    coeffs, fitted_funcs, expressions = fit_3d_curve(filtered_data, n_fourier=6, n_poly=3)
+    print("\n执行三阶傅里叶-三阶多项式拟合...")
+    coeffs, fitted_funcs, expressions = fit_3d_curve(filtered_data, n_fourier=3, n_poly=3)
     
     # 打印曲线解析式
     print("\n拟合曲线的解析式：")
@@ -62,8 +62,9 @@ def main_with_curve_fit():
     print("\n拟合结果已保存到 fit_results_fourier_polynomial.png")
 
 def main_with_dual_trajectories():
-    """比较两个轨迹数据"""
+    """比较两个轨迹数据并应用傅里叶-多项式混合拟合"""
     from plot_utils import plot_dual_trajectories
+    from curve_fit_utils import fit_3d_curve
     
     # 读取第一个轨迹数据
     print("读取第一个轨迹数据(ps.csv)...")
@@ -80,6 +81,22 @@ def main_with_dual_trajectories():
     print("对第二个轨迹应用卡尔曼滤波...")
     data2_filtered = apply_kalman_filter(data2_original)
     
+    # 对滤波后的数据进行三阶傅里叶-三阶多项式拟合
+    print("\n对第一个轨迹进行三阶傅里叶-三阶多项式拟合...")
+    coeffs1, fitted_funcs1, expressions1 = fit_3d_curve(data1_filtered, n_fourier=3, n_poly=3)
+    
+    print("对第二个轨迹进行三阶傅里叶-三阶多项式拟合...")
+    coeffs2, fitted_funcs2, expressions2 = fit_3d_curve(data2_filtered, n_fourier=3, n_poly=3)
+    
+    # 打印拟合表达式
+    print("\n第一个轨迹的拟合表达式:")
+    for expr in expressions1:
+        print(expr)
+    
+    print("\n第二个轨迹的拟合表达式:")
+    for expr in expressions2:
+        print(expr)
+    
     # 绘制双轨迹对比图（原始数据）
     print("\n绘制原始轨迹对比图...")
     plot_dual_trajectories(data1_original, data2_original, 
@@ -95,6 +112,16 @@ def main_with_dual_trajectories():
                           save_path="trajectory_comparison_filtered.png")
     
     print("滤波后对比图已保存到 trajectory_comparison_filtered.png")
+    
+    # 绘制双轨迹对比图（滤波后数据 + 拟合曲线）
+    print("\n绘制滤波后轨迹对比图（带拟合曲线）...")
+    plot_dual_trajectories(data1_filtered, data2_filtered, 
+                          title="回旋镖轨迹对比(滤波后 + 拟合曲线)",
+                          save_path="trajectory_comparison_fitted.png",
+                          fitted_funcs1=fitted_funcs1,
+                          fitted_funcs2=fitted_funcs2)
+    
+    print("滤波后带拟合曲线的对比图已保存到 trajectory_comparison_fitted.png")
 
 if __name__ == "__main__":
     print("请选择要运行的功能：")

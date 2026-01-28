@@ -155,16 +155,19 @@ def main() -> None:
     ky = run_filter(t, y, args.process_noise, args.measurement_noise)
     kz = run_filter(t, z, args.process_noise, args.measurement_noise)
 
-    t_spline, xs = spline_interpolate(t, kx, args.spline_factor)
-    _, ys = spline_interpolate(t, ky, args.spline_factor)
-    _, zs = spline_interpolate(t, kz, args.spline_factor)
+    # Normalize time after Kalman filtering: start at 0 with fixed step
+    t_norm = np.arange(len(t), dtype=float) * 0.0166667
+
+    t_spline, xs = spline_interpolate(t_norm, kx, args.spline_factor)
+    _, ys = spline_interpolate(t_norm, ky, args.spline_factor)
+    _, zs = spline_interpolate(t_norm, kz, args.spline_factor)
 
     spline_data = (t_spline, xs, ys, zs)
     if not args.no_export:
         out_csv = export_track(args.csv_path, t_spline, xs, ys, zs)
         print(f"Exported: {out_csv}")
 
-    plot_tracks((t, x, y, z), (t, kx, ky, kz), spline_data,
+    plot_tracks((t, x, y, z), (t_norm, kx, ky, kz), spline_data,
                 title=str(args.csv_path), output=args.output, show=args.show)
 
 

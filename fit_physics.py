@@ -19,17 +19,20 @@ A_SPAN = 0.15        # Wingspan (m)
 D_WIDTH = 0.028      # Wing width (m)
 AREA = 2 * A_SPAN * D_WIDTH # Reference Area (approx)
 I_Z = (5/24) * M * (A_SPAN**2) # Moment of Inertia
+OMEGA_DECAY = 0.1    # Fixed spin decay (1/s)
+GROUND_EFFECT = 0.4  # Reduced ground effect strength (40%)
+GROUND_HEIGHT = 0.2  # Ground effect scale height (m)
 
 # Track metadata from README
 # (turns, duration) -> omega = turns * 2pi / duration
 TRACK_META = {
     'track1': 5.3 / 0.93 * 2 * np.pi,
     'track2': 7.8 / 1.28 * 2 * np.pi,
-    'track3': 5.5 / 1.08 * 2 * np.pi, # Corrected based on user table
+    # 'track3': 5.5 / 1.08 * 2 * np.pi,
     'track5': 5.0 / 1.17 * 2 * np.pi,
     'track6': 5.4 / 1.07 * 2 * np.pi,
     'track7': 5.2 / 1.17 * 2 * np.pi,
-    'track8': 4.3 / 0.88 * 2 * np.pi,
+    # 'track8': 4.3 / 0.88 * 2 * np.pi,
     'track9': 4.8 / 1.07 * 2 * np.pi,
 }
 
@@ -57,60 +60,69 @@ def load_data():
         }
     return tracks
 
-def boomerang_ode(state, t, C_L, C_D, D_factor, coupling_eff, omega, rotor_lift_ratio):
+def boomerang_ode(state, t, CL_trans, CL_rotor, C_D, D_factor, coupling_eff, dive_steering_loss, bank_factor, omega0):
     x, y, z, vx, vy, vz = state
+    
+    # Update Omega (Spin Decay)
+    # Omega drops over time due to friction. Let's use simple linear decay with a floor.
+    # omega(t) = omega0 * (1 - decay * t)
+    omega_t = max(omega0 * 0.1, omega0 * (1.0 - OMEGA_DECAY * t))
     
     # Speed variables
     v_sq = vx**2 + vy**2 + vz**2
-    v_abs = np.sqrt(v_sq)
-    v_xy_sq = vx**2 + vy**2  # Speed contributing to main lift
+    v_abs = np.sqrt(v_sq) + 1e-6 # Avoid div by zero
+    v_xy = np.sqrt(vx**2 + vy**2) + 1e-6
     
     # Coefficients
-    # Lift/Drag factors (F = 0.5 * rho * v^2 * C * A)
-    # Accel = F/m = (0.5 * rho * A / m) * C * v^2
     K_aero = (0.5 * RHO * AREA) / M
     
-    # Precession logic (Linearized approx from user model, adapted for quadratic nature?)
-    # User model: Torque ~ v. Omega ~ Torque. a_c = Omega * v ~ v^2.
-    # Current K_gyro constant in code was: (D * rho * CL * w * a^3 * d) / (2 I).
-    # This was derived for Torque. 
-    # Let's keep the user's Gyro structure but scale it properly or integrate it.
-    # Original: dvx = K_gyro * vy. (accel ~ speed).
-    # But centripetal force needs accel ~ speed^2 if radius is constant?
-    # Actually for boomerang: Radius ~ v / Omega. Omega ~ v. Radius ~ Constant.
-    # So accel ~ v^2 / R ~ v^2.
-    # So we should multiply by v_abs or similar to upgrade to quadratic if we want to be strict.
-    # HOWEVER, let's stick to the "User Form" for turning key, but FIX Z-axis first.
+    # Precession Base
+    # Note: Using real-time omega_t here.
+    # As omega drops, I*omega drops, making it EASIER to tilt (Acc_precess ~ Torque / (I*omega)).
+    # But Torque itself (D_factor * ...) might depend on omega too? 
+    # Usually Torque ~ Lift_diff ~ v * omega.
+    # So Acc_precess ~ (v * omega) / omega ~ v. 
+    # So Omega cancelling out is a first-order approx.
+    # Let's keep the formula but plug in omega_t to be safe.
     
-    K_gyro_base = (D_factor * RHO * C_L * omega * (A_SPAN**3) * D_WIDTH) / (2 * I_Z)
+    K_gyro_val = (D_factor * RHO * CL_trans * omega_t * (A_SPAN**3) * D_WIDTH) / (2 * I_Z)
     
+    # --- Angle of Attack / Dive Logic ---
+    # When diving (vz < 0), we assume the boomerang "flattens" or "planes", 
+    # causing it to generate Lift but lose some Turning ability (Steering Loss).
+    # dive_ratio goes from 0 (level/climb) to 1 (vertical dive)
+    dive_ratio = 0.0
+    if vz < 0:
+        dive_ratio = min(1.0, abs(vz) / v_abs)
+    
+    # Modify Turning Efficiency based on Dive
+    # If diving, we reduce the gyro effect by dive_steering_loss factor
+    # steering_multiplier = 1.0 - (loss_coeff * dive_ratio)
+    steering_eff = max(0.0, 1.0 - dive_steering_loss * dive_ratio)
+    
+    K_gyro_effective = K_gyro_val * steering_eff
+
     # --- Equations ---
     
-    # 1. Drag (Quadratic is standard for air)
-    # a_drag = - K_aero * C_D * v * v_vector
+    # 1. Drag
     ax_drag = - K_aero * C_D * v_abs * vx
     ay_drag = - K_aero * C_D * v_abs * vy
     az_drag = - K_aero * C_D * v_abs * vz
     
-    # 2. Lift (Vertical) - FIX: Added Rotor Lift Term
-    # Translational Lift: ~ v^2 (dominates at high speed)
-    # Rotational Lift: ~ (omega * R)^2 (provides "hover" at low speed)
-    # rotor_lift_ratio determines how much "helicopter effect" we have relative to wing lift
-    # Average blade tip speed approx: V_tip = omega * A_SPAN
-    v_tip_sq = (omega * A_SPAN)**2
-    az_lift_trans = K_aero * C_L * v_xy_sq
-    az_lift_rotor = K_aero * C_L * v_tip_sq * rotor_lift_ratio
-    
-    az_lift = az_lift_trans + az_lift_rotor
+    # 2. Lift (Empirical Power Law)
+    # Use v_xy**lift_power instead of v_xy^2, and remove CL_rotor
+    # CL_trans: base lift coefficient
+    # lift_power: to be optimized (1.2~2.2)
+    lift_power = bank_factor  # Reuse bank_factor slot for lift_power (for now)
+    az_lift = K_aero * CL_trans * (v_xy ** lift_power)
+    # Ground effect: mild lift boost near the ground
+    ground_factor = 1.0 + GROUND_EFFECT * np.exp(-max(z, 0.0) / GROUND_HEIGHT)
+    az_lift *= ground_factor
     
     # 3. Precession (Turning)
-    # Original: K_gyro * vy. Let's keep structure but maybe scale with v if needed?
-    # User's model was Linear. Let's try Linear first for turning, as it produced good shapes.
-    # But since we upgraded drag to Quadratic, maybe linear turning is too weak at high speed?
-    # Let's try Linear turning (User's) + Quadratic Drag/Lift (New).
-    
-    ax_gyro = K_gyro_base * vy
-    ay_gyro = - (coupling_eff * K_gyro_base) * vx
+    # Applied with dive correction
+    ax_gyro = K_gyro_effective * vy
+    ay_gyro = - (coupling_eff * K_gyro_effective) * vx
     
     # Total Accel
     dvx = ax_gyro + ax_drag
@@ -119,23 +131,24 @@ def boomerang_ode(state, t, C_L, C_D, D_factor, coupling_eff, omega, rotor_lift_
     
     return [vx, vy, vz, dvx, dvy, dvz]
 
+
 def simulate_track(params, track_data):
-    C_L, C_D, D_factor, coupling_eff, v_scale, rotor_lift = params
+    CL_trans, C_D, D_factor, coupling_eff, dive_steering, lift_power = params
     t = track_data['t']
     v0 = track_data['v0']
     r0 = track_data['pos'][0]
-    omega = track_data['omega']
+    omega0 = track_data['omega']
 
     state0 = [
         r0[0], r0[1], r0[2],
-        v0[0] * v_scale, v0[1] * v_scale, v0[2] * v_scale,
+        v0[0], v0[1], v0[2],
     ]
  
     sol = odeint(
         boomerang_ode,
         state0,
         t,
-        args=(C_L, C_D, D_factor, coupling_eff, omega, rotor_lift),
+        args=(CL_trans, 0.0, C_D, D_factor, coupling_eff, dive_steering, lift_power, omega0),
     )
     return sol[:, 0:3] # Return positions
 
@@ -166,22 +179,22 @@ def main():
 
     print(f"Loaded {len(tracks)} tracks. Fitting parameters...")
 
-    # Initial guess: [C_L, C_D, D_factor, coupling_eff, v_scale, rotor_lift]
-    initial_guess = [0.5, 0.5, 0.3, 1.0, 1.0, 0.1]
+    # Initial guess: [CL_trans, C_D, D_factor, coupling_eff, dive_steering, lift_power]
+    # CL_trans: High speed lift
+    # C_D: drag
+    # D_factor: precession
+    # coupling_eff: y-coupling
+    # dive_steering: 0-1. How much turning power we lose when diving.
+    # lift_power: exponent for v_xy (1.2~2.2)
+    initial_guess = [0.4, 0.5, 0.3, 1.0, 0.5, 1.7]
 
-    # Bounds for realism
-    # C_L, C_D: 0-5
-    # D: 0-2
-    # Coupling: 0-2 (keep close to physical range)
-    # v_scale: 0.2-5 (global velocity scale)
-    # rotor_lift: 0-0.5 (fraction of lift coming from pure rotation)
     bounds = [
-        (0, 5),    # C_L
+        (0, 5),    # CL_trans
         (0, 5),    # C_D
         (0, 2),    # D
         (0, 2),    # Coupling
-        (0.2, 5),  # v_scale
-        (0.0, 1.0) # rotor_lift ratio
+        (0, 2.0),  # dive_steering_loss
+        (1.2, 2.2) # lift_power
     ]
     
     res = minimize(loss_function, initial_guess, args=(tracks,), 
@@ -192,16 +205,18 @@ def main():
     print("params:", p)
     print("loss:", res.fun)
     
-    # Unpack params including new rotor lift
-    C_L, C_D, D_factor, coupling_eff, v_scale, rotor_lift = p
-    
+    # Unpack params
+    CL_trans, C_D, D_factor, coupling_eff, dive_steering, lift_power = p
+
     print(f"\nFitted Parameters:")
-    print(f"  C_L (Lift Coeff): {C_L:.4f}")
-    print(f"  C_D (Drag Coeff): {C_D:.4f}")
-    print(f"  D   (Shape Fac.): {D_factor:.4f}")
-    print(f"  Coupling Eff.  : {coupling_eff:.4f}")
-    print(f"  Vel Scale      : {v_scale:.4f}")
-    print(f"  Rotor Lift %   : {rotor_lift*100:.2f}% (Lift from spin vs speed)")
+    print(f"  CL_trans     : {CL_trans:.4f} (Translational Lift)")
+    print(f"  C_D          : {C_D:.4f}")
+    print(f"  D_coeff      : {D_factor:.4f}")
+    print(f"  Coupling     : {coupling_eff:.4f}")
+    print("  Vel Scale    : 1.0000 (fixed)")
+    print("  Omega Decay  : 10.00% / sec (fixed)")
+    print(f"  Dive SteerLoss: {dive_steering:.2f} (Turning loss when diving)")
+    print(f"  Lift Power   : {lift_power:.4f} (v_xy exponent)")
     
     if coupling_eff < 0.1:
         print("\n[Conclusion] Coupling Efficiency is low -> Original model (no y-coupling) might be closer, OR physics is different.")

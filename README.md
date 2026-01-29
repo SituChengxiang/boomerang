@@ -58,33 +58,38 @@ def estimate_initial_velocity(t, x, y, z, method='weighted')
 def calculate_flight_time(t, z, ground_level=0.0)
 ```
 
-### 6. **可视化工具** (`plot_utils.py`)
-**重复代码**：多个文件中的绘图函数
+## 一些模块的参数调整说明
+
+### 1. smoother - 平滑模块
+
+利用RTSKalmanSmoother进行双向轨迹平滑，相比kalman滤波更平稳一点
 ```python
-# 核心功能
-def plot_3d_trajectory(x, y, z, title="", ax=None)
-def plot_energy_analysis(t, energy, dE_dt, ax=None)
-def plot_velocity_components(t, vx, vy, vz, ax=None)
+# __init__里的参数
+self.process_noise = 0.01      # 过程噪声（模型不确定性）
+self.measurement_noise = 0.1    # 测量噪声（数据不确定性）
 ```
+**process_noise（过程噪声）**
 
- 🎯 低优先级（最后）
+- **含义**：模型对自己预测的不确定度
+- **风险**：如果**过大** → 会过度平滑
+  - Kalman会相信模型（常速模型）而不相信数据
+  - 结果：轨迹被"拉"成直线，丢失了回旋镖的真实波动
+  - **末段尤其明显**：着陆时回旋镖在减速，速度变化快，但常速模型假设"速度不变"
 
-### 7. **文件发现模块** (`file_utils.py`)
-**重复逻辑**：查找特定模式的文件
+**measurement_noise（测量噪声）**
+
+- **含义**：数据本身的不确定度（传感器噪声）
+- **风险**：如果**过大** → 也会过度平滑
+  - 认为数据噪声大，所以多平滑
+  - **末段问题**：着陆时真实信号弱，噪声占比高，更容易被平滑掉
+
 ```python
-# 核心功能
-def find_track_files(directory, pattern="*opt.csv")
-def find_velocity_files(directory, pattern="velocity.csv")
-def batch_process_files(directory, process_func, pattern="*.csv")
-```
-
-### 8. **配置管理** (`config.py`)
-**硬编码值**：物理常数、默认参数
-```python
-# 核心功能
-class BoomerangConfig:
-    MASS = 0.00218
-    GRAVITY = 9.793
-    AIR_DENSITY = 1.225
-    # ...
+def get_smoother_config() -> dict:
+    """Return default smoother configuration."""
+    return {
+        "kalman_process_noise": 1e-4,      # 比你的默认0.01小！（更平滑）
+        "kalman_measurement_noise": 1e-2,    # 比你的默认0.1小！（更平滑）
+        "savgol_window": 7,                # 窗口大小
+        "savgol_polyorder": 3,              # 多项式阶数
+    }
 ```

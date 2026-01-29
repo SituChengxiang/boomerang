@@ -48,7 +48,7 @@ def ensure_strictly_increasing_time(
     cleaned = [np.asarray(s, dtype=float)[finite_mask] for s in series]
 
     if len(t) == 0:
-        return (t, *cleaned)
+        return t, *cleaned
 
     # 按时间排序
     order = np.argsort(t)
@@ -69,7 +69,7 @@ def ensure_strictly_increasing_time(
     t_out = t[keep]
     series_out = [s[keep] for s in cleaned]
 
-    return (t_out, *series_out)
+    return t_out, *series_out
 
 
 def load_track(

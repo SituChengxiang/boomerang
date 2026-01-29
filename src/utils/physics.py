@@ -154,14 +154,14 @@ def calculate_total_energy(
 
     # If velocities not provided, compute derivatives
     if vx is None or vy is None or vz is None:
-        derivs = compute_derivatives(t, x, y, z, method="auto")
-        vx, vy, vz = derivs.vx, derivs.vy, derivs.vz
-        ax, ay, az = derivs.ax, derivs.ay, derivs.az
+        derives = compute_derivatives(t, x, y, z, method="auto")
+        vx, vy, vz = derives.vx, derives.vy, derives.vz
+        ax, ay, az = derives.ax, derives.ay, derives.az
     else:
         # Compute accelerations from velocities using derivatives module
         # Pass velocities as "positions" to get their derivatives (accelerations)
-        derivs_acc = compute_derivatives(t, vx, vy, vz, method="gradient", edge_order=2)
-        ax, ay, az = derivs_acc.ax, derivs_acc.ay, derivs_acc.az
+        derives_acc = compute_derivatives(t, vx, vy, vz, method="gradient", edge_order=2)
+        ax, ay, az = derives_acc.ax, derives_acc.ay, derives_acc.az
 
     # Kinetic energy per unit mass: 0.5 * v^2
     kinetic_energy = 0.5 * (vx**2 + vy**2 + vz**2)
@@ -341,8 +341,8 @@ def calculate_dissipative_energy_rate(
     # Compute accelerations if not provided
     if ax is None or ay is None or az is None:
         # Pass velocities as "positions" to get their derivatives (accelerations)
-        derivs = compute_derivatives(t, vx, vy, vz, method="gradient", edge_order=2)
-        ax, ay, az = derivs.ax, derivs.ay, derivs.az
+        derives = compute_derivatives(t, vx, vy, vz, method="gradient", edge_order=2)
+        ax, ay, az = derives.ax, derives.ay, derives.az
 
     # From energy equation: dE/dt = v·a + g*vz
     # If we know actual dE/dt < 0, then power lost:

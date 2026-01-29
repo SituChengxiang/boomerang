@@ -8,12 +8,13 @@
 /dataSources.local.xml
 /target/
 /.idea/
-/debug/
+/src/*/*/debug/*
+/src/*/target
 /.vs/
 *.nbc
 *.nbi
 *.pyc
-/out/
+/out/*
 *.png
-/data/.directory
-Cargo.lock
+/*/.directory
+/src/*/Cargo.lock

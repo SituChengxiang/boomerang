@@ -11,7 +11,7 @@ Provides multiple numerical differentiation methods for trajectory data:
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 from scipy.interpolate import CubicSpline
@@ -115,6 +115,9 @@ def savgol_method(
 
     Returns:
         Derivatives object with velocities and accelerations
+        :param y:
+        :param t:
+        :param x:
     """
     n = len(t)
     if n < 3:
@@ -376,7 +379,7 @@ def compute_derivatives(
         t: Time array (must be strictly increasing)
         x, y, z: Position arrays
         method: One of:
-            - "auto": Choose best method based on data
+            - "auto": Choose the best method based on data
             - "gradient": numpy.gradient (fast, robust)
             - "savgol": Savitzky-Golay (smooth, for uniform dt)
             - "spline": Cubic spline (smooth, for curve fitting)
@@ -509,7 +512,7 @@ def ensure_strictly_increasing_time(
     cleaned = [np.asarray(s, dtype=float)[finite_mask] for s in series]
 
     if len(t) == 0:
-        return (t, *cleaned)
+        return t, *cleaned
 
     # Sort by time
     order = np.argsort(t)
@@ -528,4 +531,4 @@ def ensure_strictly_increasing_time(
     keep = np.asarray(keep_idx, dtype=int)
     t_out = t[keep]
     series_out = [s[keep] for s in cleaned]
-    return (t_out, *series_out)
+    return t_out, *series_out

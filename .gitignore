@@ -10,7 +10,9 @@
 /.idea/
 /debug/
 /.vs/
-/src/__pycache__/
+*.nbc
+*.nbi
+*.pyc
 /out/
 *.png
 /data/.directory

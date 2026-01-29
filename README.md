@@ -28,10 +28,63 @@ boomerang
     |-- visualization（可视化相关）
     |-- fit（轨迹拟合相关）
     |-- preprocess（预处理）
-    `-- utlis（一些小的工具）
+    `-- utils（一些小的工具）
 ```
 
 ## 我踩的坑
 
 1. 一定要先确保处理后的数据是物理自洽的
-2. 
+
+
+## 接下来的工作安排
+
+🎯 中优先级（接下来）
+
+### 4. **时间处理模块** (`time_utils.py`)
+**重复逻辑**：时间标准化、均匀性检查
+```python
+# 核心功能
+def normalize_time(t, target_freq=60.0)
+def is_uniform_time(t, rel_tol=1e-3)
+def resample_time_series(t, values, new_freq=60.0)
+```
+
+### 5. **轨迹分析模块** (`trajectory.py`)
+**重复逻辑**：轨迹特征提取
+```python
+# 核心功能
+def calculate_trajectory_features(t, x, y, z)
+def estimate_initial_velocity(t, x, y, z, method='weighted')
+def calculate_flight_time(t, z, ground_level=0.0)
+```
+
+### 6. **可视化工具** (`plot_utils.py`)
+**重复代码**：多个文件中的绘图函数
+```python
+# 核心功能
+def plot_3d_trajectory(x, y, z, title="", ax=None)
+def plot_energy_analysis(t, energy, dE_dt, ax=None)
+def plot_velocity_components(t, vx, vy, vz, ax=None)
+```
+
+ 🎯 低优先级（最后）
+
+### 7. **文件发现模块** (`file_utils.py`)
+**重复逻辑**：查找特定模式的文件
+```python
+# 核心功能
+def find_track_files(directory, pattern="*opt.csv")
+def find_velocity_files(directory, pattern="velocity.csv")
+def batch_process_files(directory, process_func, pattern="*.csv")
+```
+
+### 8. **配置管理** (`config.py`)
+**硬编码值**：物理常数、默认参数
+```python
+# 核心功能
+class BoomerangConfig:
+    MASS = 0.00218
+    GRAVITY = 9.793
+    AIR_DENSITY = 1.225
+    # ...
+```

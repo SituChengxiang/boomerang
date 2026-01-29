@@ -29,9 +29,10 @@ def analyze_track(df, track_name):
     if window < 5:
         window = 3
 
-    ax = savgol_filter(vx, window, 3, deriv=1, delta=dt)
-    ay = savgol_filter(vy, window, 3, deriv=1, delta=dt)
-    az = savgol_filter(vz, window, 3, deriv=1, delta=dt)
+    dt_float = float(dt)
+    ax = savgol_filter(vx, window, 3, deriv=1, delta=dt_float)
+    ay = savgol_filter(vy, window, 3, deriv=1, delta=dt_float)
+    az = savgol_filter(vz, window, 3, deriv=1, delta=dt_float)
 
     # Physics Variables
     v_xy_sq = vx**2 + vy**2
@@ -123,7 +124,7 @@ def plot_vertical_velocity_vs_time(tracks_data, df_all):
     cmap = plt.get_cmap("tab10")
 
     for i, track in enumerate(tracks_data.keys()):
-        df_track = df_all[df_all.track == track].sort_values("t")
+        df_track = df_all[df_all.track == track].sort_values(by="t")  # type: ignore[attr-defined]
         if len(df_track) < 10:
             continue
         color = cmap(i % 10)
@@ -223,7 +224,7 @@ def plot_energy_change_rate(energy_data):
         color = cmap(i % 10)
 
         # Calculate energy change rate (dE/dt)
-        dt = np.mean(np.diff(t))
+        # dt = np.mean(np.diff(t))
         dE_dt = np.gradient(total_energy, t)
 
         # Smooth if possible
@@ -251,7 +252,7 @@ def plot_energy_change_rate(energy_data):
 
 def main():
     try:
-        df_all = pd.read_csv("data/velocity.csv")
+        df_all = pd.read_csv("../../data/interm/velocity.csv")
     except FileNotFoundError:
         print("Error: data/velocity.csv not found.")
         return
@@ -265,7 +266,7 @@ def main():
     print(f"Analyzing {len(tracks)} tracks...")
 
     for track in tracks:
-        df_track = df_all[df_all.track == track].sort_values("t")
+        df_track = df_all[df_all.track == track].sort_values(by="t")  # type: ignore[attr-defined]
         if len(df_track) < 10:
             continue
 

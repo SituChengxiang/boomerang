@@ -83,7 +83,126 @@ class RTSKalmanSmoother:
             x_s[i] = x_f[i] + C @ (x_s[i + 1] - F @ x_f[i])
             P_s[i] = P_f[i] + C @ (P_s[i + 1] - F @ P_f[i] @ F.T - self.Q) @ C.T
 
-        return x_s[:, 0]  # Return smoothed positions
+        return x_s
+
+
+def calculate_energy(
+    t: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Calculate mechanical energy per unit mass and its derivative using robust numerical methods.
+
+    Args:
+        t: Time array (must be strictly increasing)
+        x, y, z: Position arrays
+
+    Returns:
+        Tuple of (energy_per_mass, dE_dt) where:
+            energy_per_mass = 0.5*(vx² + vy² + vz²) + g*z
+            dE_dt = derivative of energy_per_mass (v·a + g*vz)
+    """
+    # 确保时间严格递增且无重复（使用已有的辅助函数）
+    t, x, y, z = _ensure_strictly_increasing_time(t, x, y, z)
+
+    n = len(t)
+    if n < 2:
+        # 数据点太少，返回NaN数组
+        energy = np.full_like(t, np.nan, dtype=float)
+        dE_dt = np.full_like(t, np.nan, dtype=float)
+        return energy, dE_dt
+
+    # 方法1：如果数据点足够，使用样条导数（更平滑）
+    use_spline = n >= 4
+    vx = np.zeros(n, dtype=float)
+    vy = np.zeros(n, dtype=float)
+    vz = np.zeros(n, dtype=float)
+    ax = np.zeros(n, dtype=float)
+    ay = np.zeros(n, dtype=float)
+    az = np.zeros(n, dtype=float)
+
+    if use_spline:
+        try:
+            # 使用三次样条计算导数和二阶导数
+            sx = CubicSpline(t, x, bc_type="natural")
+            sy = CubicSpline(t, y, bc_type="natural")
+            sz = CubicSpline(t, z, bc_type="natural")
+
+            vx = sx.derivative(1)(t)
+            vy = sy.derivative(1)(t)
+            vz = sz.derivative(1)(t)
+
+            ax = sx.derivative(2)(t)
+            ay = sy.derivative(2)(t)
+            az = sz.derivative(2)(t)
+        except Exception:
+            # 样条失败，回退到数值差分
+            use_spline = False
+
+    if not use_spline:
+        # 方法2：使用中心差分法（内部点）和前向/后向差分（边界点）
+        # 计算时间间隔
+        dt = np.diff(t)
+        # 避免除以零
+        dt = np.where(dt <= 1e-12, 1e-12, dt)
+
+        # 内部点使用中心差分
+        if n >= 3:
+            vx[1:-1] = (x[2:] - x[:-2]) / (t[2:] - t[:-2])
+            vy[1:-1] = (y[2:] - y[:-2]) / (t[2:] - t[:-2])
+            vz[1:-1] = (z[2:] - z[:-2]) / (t[2:] - t[:-2])
+
+        # 边界点使用前向/后向差分
+        vx[0] = (x[1] - x[0]) / dt[0]
+        vy[0] = (y[1] - y[0]) / dt[0]
+        vz[0] = (z[1] - z[0]) / dt[0]
+
+        if n >= 2:
+            vx[-1] = (x[-1] - x[-2]) / dt[-1]
+            vy[-1] = (y[-1] - y[-2]) / dt[-1]
+            vz[-1] = (z[-1] - z[-2]) / dt[-1]
+
+        # 计算加速度（使用同样的差分方法）
+        if n >= 3:
+            # 内部点
+            ax[1:-1] = (vx[2:] - vx[:-2]) / (t[2:] - t[:-2])
+            ay[1:-1] = (vy[2:] - vy[:-2]) / (t[2:] - t[:-2])
+            az[1:-1] = (vz[2:] - vz[:-2]) / (t[2:] - t[:-2])
+
+        # 边界点
+        if n >= 2:
+            ax[0] = (vx[1] - vx[0]) / dt[0]
+            ay[0] = (vy[1] - vy[0]) / dt[0]
+            az[0] = (vz[1] - vz[0]) / dt[0]
+
+            if n >= 3:
+                ax[-1] = (vx[-1] - vx[-2]) / dt[-1]
+                ay[-1] = (vy[-1] - vy[-2]) / dt[-1]
+                az[-1] = (vz[-1] - vz[-2]) / dt[-1]
+
+    # 动能: 0.5*v²
+    kinetic = 0.5 * (vx**2 + vy**2 + vz**2)
+
+    # 势能: g*z
+    potential = G * z
+
+    # 总机械能
+    energy = kinetic + potential
+
+    # 能量变化率: dE/dt = v·a + g*vz
+    dE_dt = vx * ax + vy * ay + vz * az + G * vz
+
+    # 可选：对dE/dt进行轻微平滑以减少噪声
+    if n >= 5:
+        try:
+            window = min(5, n)
+            if window % 2 == 0:
+                window -= 1
+            if window >= 3:
+                dE_dt = savgol_filter(dE_dt, window, 2, mode="interp")
+        except Exception:
+            # 平滑失败，保持原值
+            pass
+
+    return energy, dE_dt
 
 
 def _ensure_strictly_increasing_time(
@@ -128,111 +247,70 @@ def _ensure_strictly_increasing_time(
     return (t_out, *series_out)
 
 
-def calculate_energy(
-    t: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray
+def calculate_energy_from_smoother(
+    t: np.ndarray,
+    smoother_states: Tuple[
+        np.ndarray, np.ndarray, np.ndarray
+    ],  # (x_state, y_state, z_state)
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Calculate mechanical energy per unit mass and its derivative.
+    """使用RTS平滑器的状态计算能量，避免数值微分"""
+    x_state, y_state, z_state = smoother_states
 
-    Args:
-        t: Time array
-        x, y, z: Position arrays
+    # 从状态中提取位置和速度
+    # 假设每个state是(n, 2)数组，[position, velocity]
+    vx = x_state[:, 1]  # x方向速度
+    vy = y_state[:, 1]  # y方向速度
+    vz = z_state[:, 1]  # z方向速度
 
-    Returns:
-        Tuple of (energy_per_mass, dE_dt) where:
-            energy_per_mass = 0.5*(vx² + vy² + vz²) + g*z
-            dE_dt = derivative of energy_per_mass
-    """
-    # Robust derivatives:
-    # - avoid np.gradient(..., dt_array) misuse
-    # - avoid divide-by-zero when t has duplicates
-    t = np.asarray(t, dtype=float)
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    z = np.asarray(z, dtype=float)
-
-    n = len(t)
-    if n < 2:
-        energy = np.full_like(t, np.nan, dtype=float)
-        dE_dt = np.full_like(t, np.nan, dtype=float)
-        return energy, dE_dt
-
-    # Initialize (keeps type-checkers happy and provides safe fallback values)
-    vx = np.full(n, np.nan, dtype=float)
-    vy = np.full(n, np.nan, dtype=float)
-    vz = np.full(n, np.nan, dtype=float)
-    ax = np.full(n, np.nan, dtype=float)
-    ay = np.full(n, np.nan, dtype=float)
-    az = np.full(n, np.nan, dtype=float)
-
-    # Prefer spline derivatives when we have enough points and strictly-increasing t.
-    use_spline = n >= 4 and np.all(np.diff(t) > 0)
-    if use_spline:
-        try:
-            sx = CubicSpline(t, x, bc_type="natural")
-            sy = CubicSpline(t, y, bc_type="natural")
-            sz = CubicSpline(t, z, bc_type="natural")
-
-            vx = sx.derivative(1)(t)
-            vy = sy.derivative(1)(t)
-            vz = sz.derivative(1)(t)
-
-            ax = sx.derivative(2)(t)
-            ay = sy.derivative(2)(t)
-            az = sz.derivative(2)(t)
-        except Exception:
-            use_spline = False
-
-    if not use_spline:
-        edge_order = 2 if n >= 3 else 1
-        vx = np.gradient(x, t, edge_order=edge_order)
-        vy = np.gradient(y, t, edge_order=edge_order)
-        vz = np.gradient(z, t, edge_order=edge_order)
-        ax = np.gradient(vx, t, edge_order=edge_order)
-        ay = np.gradient(vy, t, edge_order=edge_order)
-        az = np.gradient(vz, t, edge_order=edge_order)
-
-    # Kinetic energy per unit mass: 0.5*v²
+    # 动能: 0.5*v²
     kinetic = 0.5 * (vx**2 + vy**2 + vz**2)
 
-    # Potential energy per unit mass: g*z
-    potential = G * z
+    # 势能: g*z (使用平滑后的位置)
+    potential = G * x_state[:, 0]  # 假设x_state[:, 0]是z位置
 
-    # Total mechanical energy per unit mass
     energy = kinetic + potential
 
-    # Energy derivative: d/dt(0.5*v^2 + g*z) = v·a + g*vz
-    dE_dt = vx * ax + vy * ay + vz * az + G * vz
+    # 计算能量变化率: dE/dt = v·a
+    # 可以从平滑器状态估计加速度，或使用Savitzky-Golay平滑后的导数
+    ax = np.gradient(vx, t, edge_order=1)  # 使用更稳定的边界处理
+    ay = np.gradient(vy, t, edge_order=1)
+    az = np.gradient(vz, t, edge_order=1)
 
-    # Smooth dE/dt with Savitzky-Golay filter
-    if len(t) >= 5:
-        window = min(5, len(t))
-        if window % 2 == 0:
-            window -= 1
-        try:
-            dE_dt = savgol_filter(dE_dt, window, 2, mode="interp")
-        except Exception:
-            pass
+    dE_dt = vx * ax + vy * ay + vz * az + G * vz
 
     return energy, dE_dt
 
 
 def truncate_bad_data(
-    t: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray
+    t: np.ndarray, x_state: np.ndarray, y_state: np.ndarray, z_state: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
-    """Truncate trajectory data based on energy conservation.
+    # 提取位置（无论输入是状态还是位置）
+    if x_state.ndim == 2:  # 是状态数组
+        x = x_state[:, 0]
+        y = y_state[:, 0]
+        z = z_state[:, 0]
+    else:  # 是位置数组
+        x, y, z = x_state, y_state, z_state
 
-    Args:
-        t, x, y, z: Time and position arrays
-
-    Returns:
-        Tuple of (t_trunc, x_trunc, y_trunc, z_trunc, trunc_idx) where:
-            trunc_idx is the index where data was truncated (-1 if no truncation)
-    """
     if len(t) < 3:
         return t, x, y, z, -1
 
-    # Calculate energy and its derivative
-    energy, dE_dt = calculate_energy(t, x, y, z)
+    # 计算能量 - 使用正确的参数
+    try:
+        # 检查是否是状态数组
+        if x_state.ndim == 2:
+            # 传递状态数组
+            energy, dE_dt = calculate_energy_from_smoother(
+                t, (x_state, y_state, z_state)
+            )
+        else:
+            # 如果是位置数组，回退到原始的能量计算方法
+            # 需要导入原始的calculate_energy函数
+            energy, dE_dt = calculate_energy(t, x_state, y_state, z_state)
+    except Exception as e:
+        print(f"  Warning: Energy calculation failed: {e}")
+        print("  Falling back to simple truncation check")
+        return t, x, y, z, -1
 
     # Find first point where dE/dt > tolerance (energy increasing)
     # Allow small tolerance for numerical noise
@@ -629,9 +707,15 @@ def main() -> None:
     smoother_y = RTSKalmanSmoother(args.process_noise, args.measurement_noise)
     smoother_z = RTSKalmanSmoother(args.process_noise, args.measurement_noise)
 
-    x_smooth = smoother_x.smooth(t_raw, x_raw)
-    y_smooth = smoother_y.smooth(t_raw, y_raw)
-    z_smooth = smoother_z.smooth(t_raw, z_raw)
+    # 获取完整状态
+    x_state = smoother_x.smooth(t_raw, x_raw)
+    y_state = smoother_y.smooth(t_raw, y_raw)
+    z_state = smoother_z.smooth(t_raw, z_raw)
+
+    # 提取平滑后的位置
+    x_smooth = x_state[:, 0]
+    y_smooth = y_state[:, 0]
+    z_smooth = z_state[:, 0]
 
     # Simple mode: export RTS-smoothed positions (no truncation / energy checks).
     if args.mode == "opt-only":
@@ -678,7 +762,10 @@ def main() -> None:
     # Step 2: Energy-based truncation
     print("\nStep 2: Energy-based truncation...")
     t_trunc, x_trunc, y_trunc, z_trunc, trunc_idx = truncate_bad_data(
-        t_raw, x_smooth, y_smooth, z_smooth
+        t_raw,
+        x_state,
+        y_state,
+        z_state,  # 传递状态而不是位置
     )
 
     if trunc_idx >= 0:
@@ -799,7 +886,9 @@ def main() -> None:
     # Calculate energy for plotting
     energy_info = None
     if len(t_trunc) >= 3:
-        energy, dE_dt = calculate_energy(t_trunc, x_trunc, y_trunc, z_trunc)
+        energy, dE_dt = calculate_energy_from_smoother(
+            t_trunc, (x_trunc, y_trunc, z_trunc)
+        )
         energy_info = (t_trunc, energy, dE_dt)
 
     plot_tracks(

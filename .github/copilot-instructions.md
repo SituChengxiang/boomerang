@@ -24,7 +24,7 @@ This is a physics competition project analyzing paper boomerang trajectories. It
 	3) manually trim suspicious tail / outliers
 
 ## Dependencies & Constraints
-- Assume the environment may NOT have heavy scientific deps preinstalled (e.g. `scipy`).
+- Assume the environment have heavy scientific deps preinstalled (e.g. `scipy`).
 - Prefer solutions based on `numpy` + `matplotlib` (and `pandas` only if it’s already present/needed).
 - If a proposed change requires new dependencies, explain why and keep the code path optional.
 

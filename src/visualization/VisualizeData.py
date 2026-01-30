@@ -252,7 +252,7 @@ def plot_energy_change_rate(energy_data):
 
 def main():
     try:
-        df_all = pd.read_csv("../../data/interm/velocity.csv")
+        df_all = pd.read_csv("data/interm/velocity.csv")
     except FileNotFoundError:
         print("Error: data/velocity.csv not found.")
         return

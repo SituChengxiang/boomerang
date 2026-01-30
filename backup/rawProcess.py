@@ -29,15 +29,17 @@ if str(REPO_ROOT) not in sys.path:
 
 
 from src.utils.dataIO import load_track, save_track  # noqa: E402
-from src.utils.derivatives import compute_derivatives  # noqa: E402
-from src.utils.physics import calculate_energy_per_unit_mass  # noqa: E402
-from src.utils.smoother import smooth_trajectory  # noqa: E402
+from derivatives import compute_derivatives  # noqa: E402
+from physicsCal import calculate_energy_per_unit_mass  # noqa: E402
+from smoother import smooth_trajectory  # noqa: E402
 from src.utils.visualize import (  # noqa: E402
     plot_3d_trajectory_compare,
     # plot_time_series_multiple,
     setup_debug_style,
 )
 
+TOLERANCE_UP = 10.0  # W/kg threshold for increasing dE/dt energy growth detection
+TOLERANCE_DOWN = 30 # W/kg threshold for decreasing dE/dt energy loss detection
 
 def _default_paths(
     input_csv: pathlib.Path,
@@ -55,7 +57,7 @@ def _energy_diagnostics(
     y: np.ndarray,
     z: np.ndarray,
     warmup: int = 3,
-    tolerance: float = 10.0,
+    tolerance: float = TOLERANCE_UP,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[int]]:
     """Compute energy & suggest a truncation index (optional).
 
@@ -159,7 +161,11 @@ def main() -> None:
     print("Saved SMR.")
 
     # Step 3: Energy self-consistency check
-    energy, dE_dt, suggestion = _energy_diagnostics(t_s, x_s, y_s, z_s)
+    # Note: Physics dictates energy should dissipate (dE/dt < 0).
+    # We only flag large POSITIVE dE/dt (non-physical energy gain) as errors.
+    energy, dE_dt, suggestion = _energy_diagnostics(
+        t_s, x_s, y_s, z_s, tolerance=TOLERANCE_UP
+    )
     finite_ratio = float(np.mean(np.isfinite(energy))) if len(energy) else 0.0
     print(
         "Energy check: "
@@ -222,7 +228,7 @@ def main() -> None:
     if end_idx is None:
         end_idx = len(t_s)
 
-    t2 = t_s[:end_idx] - float(t_s[0])  # normalize time to start at 0
+    t2 = t_s[:end_idx] - float(t_s[0])  # type: ignore normalize time to start at 0
     x2 = x_s[:end_idx]
     y2 = y_s[:end_idx]
     z2 = z_s[:end_idx]

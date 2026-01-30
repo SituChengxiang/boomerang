@@ -18,12 +18,12 @@ from scipy.signal import savgol_filter
 # =========================
 # Tunable parameters (edit here)
 # =========================
-KALMAN_PROCESS_NOISE = 0.001
-KALMAN_MEASUREMENT_NOISE = 0.005
+KALMAN_PROCESS_NOISE = 0.02       # Lower = smoother curve (more inertia)
+KALMAN_MEASUREMENT_NOISE = 0.1    # Higher = ignore small jitters
 
 STARTUP_DURATION = 0.2  # seconds
-STARTUP_WINDOW = 1     # points (odd)
-STARTUP_POLYORDER =  2  # polynomial order
+STARTUP_WINDOW = 3     # points (odd)
+STARTUP_POLYORDER =  3  # polynomial order
 
 
 def normalize_time(t: np.ndarray) -> Tuple[np.ndarray, float]:
@@ -64,8 +64,20 @@ def _kalman_filter_1d(
     if not np.isfinite(dt0) or dt0 <= 0.0:
         dt0 = dt
 
+    # Robust initial velocity estimation: fit a line to the first few points
+    # (Avoids "fake high energy" artifact from single-point jitter)
     init_pos = float(measurements[0])
-    init_vel = float((measurements[1] - measurements[0]) / dt0) if n >= 2 else 0.0
+    num_init = min(5, n)
+    if num_init >= 3:
+        # Simple linear regression slope for initial velocity
+        t_init = t[:num_init]
+        x_init = measurements[:num_init]
+        A = np.vstack([t_init, np.ones(num_init)]).T
+        m, c = np.linalg.lstsq(A, x_init, rcond=None)[0]
+        init_vel = float(m)
+    else:
+        # Fallback to 2-point difference
+        init_vel = float((measurements[1] - measurements[0]) / dt0) if n >= 2 else 0.0
 
     kf = PyKalmanFilter(
         transition_matrices=transition_matrix,
@@ -76,8 +88,10 @@ def _kalman_filter_1d(
         initial_state_covariance=np.eye(2),
     )
 
-    filtered_state_means, _ = kf.filter(measurements.reshape(-1, 1))
-    return filtered_state_means[:, 0]
+    # Use RTS smoothing (forward-backward) instead of simple filter
+    # This eliminates label lag and handles sharp turns better
+    smoothed_state_means, _ = kf.smooth(measurements.reshape(-1, 1))
+    return smoothed_state_means[:, 0]
 
 
 def _startup_local_smooth(

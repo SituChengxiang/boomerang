@@ -19,54 +19,23 @@ import numpy as np
 # Physical Constants
 # ==========================================
 
-# Gravitational acceleration (m/s^2)
-# Often averaged from local gravity, but we'll use 9.793 m/s^2
-G = 9.793
 
-# Standard air density at 20°C, 1 atm (kg/m^3)
-RHO_AIR = 1.204
-
-# Boomerang mass (kg)
-MASS = 0.00218
-
-
-# ==========================================
-# Boomerang Parameters
-# ==========================================
+G = 9.793 # Gravitational acceleration (m/s^2)
+RHO_AIR = 1.204 # Standard air density at 20°C, 1 atm (kg/m^3)
+MASS = 0.00218 # Boomerang mass (kg)
 
 
 @dataclass
 class BoomerangParams:
     """Physical parameters of the paper boomerang."""
-
-    # Mass (kg)
-    mass: float = 0.00218
-
-    # Air density (kg/m^3)
-    rho: float = 1.204
-
-    # Gravity (m/s^2)
-    g: float = 9.793
-
-    # Wing area (m^2) - approximate
-    wing_area: float = 1.8e-3
-
-    # Lift coefficient (dimensionless)
-    # For a flat plate at optimal angle of attack
-    c_lift: float = 0.8
-
-    # Drag coefficient (dimensionless)
-    # Typical for paper boomerang
-    c_drag: float = 0.12
-
-    # Moment of inertia (kg·m^2)
-    # Approximate as two point masses at arm length
-    # I = 2 * m_arm * (L/2)^2 = m * L^2 / 2
-    # For typical boomerang: L ≈ 0.25m
-    i_total: float = 6.8e-5
-
-    # Arm length (m)
-    arm_length: float = 0.25
+    mass: float = MASS     # Mass (kg)
+    rho: float = RHO_AIR     # Air density (kg/m^3)
+    g: float = G     # Gravity (m/s^2)
+    wing_area: float = 1.8e-3 # Wing area (m^2) - approximate
+    c_lift: float = 0.8 # Lift coefficient (dimensionless) For a flat plate at optimal angle of attack
+    c_drag: float = 0.12 # Drag coefficient (dimensionless) Guess value for boomerang
+    arm_length: float = 0.25 # Arm length (m)
+    i_total: float = 6.8e-5     # Moment of inertia (kg·m^2) Approximate as two point masses at arm length
 
 
 # Global instance with default parameters
@@ -87,13 +56,12 @@ def calculate_kinetic_energy(
         vx: x-velocity (m/s)
         vy: y-velocity (m/s)
         vz: z-velocity (m/s)
-        mass: Mass (m) - if 1.0, returns per unit mass; otherwise returns energy
+        mass: Mass (kg) - if 1.0, returns per unit mass; otherwise returns energy
 
     Returns:
         Kinetic energy (J)
     """
-    v_sq = vx**2 + vy**2 + vz**2
-    return 0.5 * mass * v_sq
+    return 0.5 * mass * (vx**2 + vy**2 + vz**2)
 
 
 def calculate_potential_energy(
@@ -103,7 +71,7 @@ def calculate_potential_energy(
 
     Args:
         z: Height (m)
-        mass: Mass (m)
+        mass: Mass (kg)
         g: Gravitational acceleration (m/s^2)
 
     Returns:
@@ -158,10 +126,13 @@ def calculate_total_energy(
         vx, vy, vz = derives.vx, derives.vy, derives.vz
         ax, ay, az = derives.ax, derives.ay, derives.az
     else:
-        # Compute accelerations from velocities using derivatives module
-        # Pass velocities as "positions" to get their derivatives (accelerations)
-        derives_acc = compute_derivatives(t, vx, vy, vz, method="gradient", edge_order=2)
-        ax, ay, az = derives_acc.ax, derives_acc.ay, derives_acc.az
+        # Compute accelerations from velocities.
+        # NOTE: compute_derivatives returns:
+        # - .vx as first derivative of the provided x input
+        # - .ax as second derivative of the provided x input
+        # So when we pass velocity arrays as inputs, acceleration is in .vx/.vy/.vz.
+        derives_acc = compute_derivatives(t, vx, vy, vz, method="auto", edge_order=2)
+        ax, ay, az = derives_acc.vx, derives_acc.vy, derives_acc.vz
 
     # Kinetic energy per unit mass: 0.5 * v^2
     kinetic_energy = 0.5 * (vx**2 + vy**2 + vz**2)

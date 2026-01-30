@@ -78,6 +78,7 @@ def load_track(
     sort_by_time: bool = True,
     clean_time: bool = True,
     eps: float = 1e-12,
+    min_points: int = 50,
 ) -> Dict[str, np.ndarray]:
     """从CSV文件加载轨迹数据。
 
@@ -87,7 +88,7 @@ def load_track(
         sort_by_time: 是否按时间排序
         clean_time: 是否清理时间序列
         eps: 时间清理的最小间隔
-
+        min_points: 最小数据点数，少于该值会报错
     Returns:
         数据字典 {列名: 数据数组}
     """
@@ -123,6 +124,13 @@ def load_track(
         lengths = {col: len(arr) for col, arr in result.items()}
         if len(set(lengths.values())) > 1:
             raise ValueError(f"数据列长度不一致: {lengths}")
+
+        # 长度检查
+        n_points = len(result["t"])
+        if n_points < min_points:
+            raise ValueError(
+                f"数据点太少: {n_points} < {min_points} (需要至少 50 个点)"
+            )
 
         # 时间排序
         if sort_by_time and "t" in result:

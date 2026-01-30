@@ -29,17 +29,19 @@ if str(REPO_ROOT) not in sys.path:
 
 
 from src.utils.dataIO import load_track, save_track  # noqa: E402
-from derivatives import compute_derivatives  # noqa: E402
-from physicsCal import calculate_energy_per_unit_mass  # noqa: E402
-from smoother import smooth_trajectory  # noqa: E402
 from src.utils.visualize import (  # noqa: E402
     plot_3d_trajectory_compare,
     # plot_time_series_multiple,
     setup_debug_style,
 )
 
+from .derivatives import compute_derivatives  # noqa: E402
+from .physicsCal import calculate_energy_per_unit_mass  # noqa: E402
+from .smoother import smooth_trajectory  # noqa: E402
+
 TOLERANCE_UP = 10.0  # W/kg threshold for increasing dE/dt energy growth detection
-TOLERANCE_DOWN = 30 # W/kg threshold for decreasing dE/dt energy loss detection
+TOLERANCE_DOWN = 30  # W/kg threshold for decreasing dE/dt energy loss detection
+
 
 def _default_paths(
     input_csv: pathlib.Path,

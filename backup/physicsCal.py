@@ -20,22 +20,23 @@ import numpy as np
 # ==========================================
 
 
-G = 9.793 # Gravitational acceleration (m/s^2)
-RHO_AIR = 1.204 # Standard air density at 20°C, 1 atm (kg/m^3)
-MASS = 0.00218 # Boomerang mass (kg)
+G = 9.793  # Gravitational acceleration (m/s^2)
+RHO_AIR = 1.204  # Standard air density at 20°C, 1 atm (kg/m^3)
+MASS = 0.00218  # Boomerang mass (kg)
 
 
 @dataclass
 class BoomerangParams:
     """Physical parameters of the paper boomerang."""
-    mass: float = MASS     # Mass (kg)
-    rho: float = RHO_AIR     # Air density (kg/m^3)
-    g: float = G     # Gravity (m/s^2)
-    wing_area: float = 1.8e-3 # Wing area (m^2) - approximate
-    c_lift: float = 0.8 # Lift coefficient (dimensionless) For a flat plate at optimal angle of attack
-    c_drag: float = 0.12 # Drag coefficient (dimensionless) Guess value for boomerang
-    arm_length: float = 0.25 # Arm length (m)
-    i_total: float = 6.8e-5     # Moment of inertia (kg·m^2) Approximate as two point masses at arm length
+
+    mass: float = MASS  # Mass (kg)
+    rho: float = RHO_AIR  # Air density (kg/m^3)
+    g: float = G  # Gravity (m/s^2)
+    wing_area: float = 1.8e-3  # Wing area (m^2) - approximate
+    c_lift: float = 0.8  # Lift coefficient (dimensionless) For a flat plate at optimal angle of attack
+    c_drag: float = 0.12  # Drag coefficient (dimensionless) Guess value for boomerang
+    arm_length: float = 0.25  # Arm length (m)
+    i_total: float = 6.8e-5  # Moment of inertia (kg·m^2) Approximate as two point masses at arm length
 
 
 # Global instance with default parameters
@@ -118,7 +119,7 @@ def calculate_total_energy(
         >>> vx, vy, vz = np.array([0, 1, 1]), np.array([0, 0, 0]), np.array([0, -5, -5])
         >>> energy, dE_dt = calculate_total_energy(t, x, y, z, vx, vy, vz)
     """
-    from src.utils.derivatives import compute_derivatives
+    from derivatives import compute_derivatives
 
     # If velocities not provided, compute derivatives
     if vx is None or vy is None or vz is None:
@@ -307,7 +308,7 @@ def calculate_dissipative_energy_rate(
     Returns:
         Power dissipation (W) = -dE/dt
     """
-    from src.utils.derivatives import compute_derivatives
+    from derivatives import compute_derivatives
 
     # Compute accelerations if not provided
     if ax is None or ay is None or az is None:

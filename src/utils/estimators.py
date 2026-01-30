@@ -11,16 +11,17 @@ from dataclasses import dataclass
 from typing import Protocol, Tuple
 
 import numpy as np
-from mathUtils import (
-    magnitude,
-    savgol_derivatives,
-    spline_derivative_analytical,
-    standardize_time_grid,
-)
 from pykalman import KalmanFilter
 from scipy.interpolate import CubicSpline
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+
+from .mathUtils import (
+    local_initial_derivative,
+    magnitude,
+    spline_derivative_analytical,
+    standardize_time_grid,
+)
 
 
 @dataclass
@@ -88,8 +89,38 @@ class KalmanEstimator:
         Q = np.eye(3) * self.process_noise
         R = np.array([[self.measurement_noise]])
 
-        init_state = np.array([x[0], (x[1] - x[0]) / dt, 0.0])
-        init_cov = np.eye(3)
+        # Robust initial state estimation using weighted quadratic least squares
+        # Fit polynomial y = a*x^2 + b*x + c to first 7 points
+        n_init = min(7, len(x))
+        t_init = t[:n_init]
+        x_init = x[:n_init]
+
+        # Weighting: exponential decay for older points
+        weights = np.exp(
+            -np.linspace(0, 2, n_init)
+        )  # weights: ~0.1 to 1.0 for far to near
+
+        # Build Vandermonde matrix for quadratic fit: [1, t, t^2]
+        A = np.column_stack([t_init**2, t_init, np.ones(n_init)])
+
+        # Weighted least squares: (A^T W A) theta = A^T W x
+        W = np.diag(weights)
+        AW = A.T @ W @ A
+        bW = A.T @ W @ x_init
+        theta = np.linalg.solve(AW, bW)  # [a, b, c]
+
+        # Initial velocity = derivative at t[0] = 2*a*t[0] + b
+        v_init = 2 * theta[0] * t_init[0] + theta[1]
+
+        # Clamp velocity to plausible range
+        # For boomerang telemetry, velocity typically 0-20 m/s
+        v_init = float(np.clip(v_init, -30.0, 30.0))
+
+        init_state = np.array([x[0], v_init, 0.0])
+
+        # Tight initial covariance to prevent Kalman from diverging
+        # Position: 0.01m, Velocity: 1 m/s, Acceleration: 1 m/s²
+        init_cov = np.diag([0.01, 1.0, 1.0])
 
         kf = KalmanFilter(
             transition_matrices=F,
@@ -100,8 +131,13 @@ class KalmanEstimator:
             initial_state_covariance=init_cov,
         )
 
-        kf = kf.em(x.reshape(-1, 1), n_iter=self.em_iters)
+        # EM iterations - fewer iterations to prevent overfitting noise
+        kf = kf.em(x.reshape(-1, 1), n_iter=min(self.em_iters, 5))
         state_means, state_covs = kf.smooth(x.reshape(-1, 1))
+
+        # Post-process: Clip unrealistic velocities
+        # Replace any velocity > 100 m/s (impossible for boomerang)
+        state_means[:, 1] = np.clip(state_means[:, 1], -100.0, 100.0)
 
         return state_means, state_covs
 
@@ -118,26 +154,14 @@ class KalmanEstimator:
         means = np.stack(state_means, axis=2)  # (N, 3, 3)
         sigma = np.stack(state_sigmas, axis=1)  # (N, 3)
 
-        # Align to uniform time grid
-        t_std, x_std = standardize_time_grid(t, means[:, 0, 0])
-        y_std = CubicSpline(t - t[0], means[:, 0, 1], bc_type="natural")(t_std)
-        z_std = CubicSpline(t - t[0], means[:, 0, 2], bc_type="natural")(t_std)
-        pos_std = np.stack([x_std, y_std, z_std], axis=1)
-
-        vx_std = CubicSpline(t - t[0], means[:, 1, 0], bc_type="natural")(t_std)
-        vy_std = CubicSpline(t - t[0], means[:, 1, 1], bc_type="natural")(t_std)
-        vz_std = CubicSpline(t - t[0], means[:, 1, 2], bc_type="natural")(t_std)
-        vel_std = np.stack([vx_std, vy_std, vz_std], axis=1)
-
-        ax_std = CubicSpline(t - t[0], means[:, 2, 0], bc_type="natural")(t_std)
-        ay_std = CubicSpline(t - t[0], means[:, 2, 1], bc_type="natural")(t_std)
-        az_std = CubicSpline(t - t[0], means[:, 2, 2], bc_type="natural")(t_std)
-        acc_std = np.stack([ax_std, ay_std, az_std], axis=1)
-
-        sigma_std = CubicSpline(t - t[0], sigma, bc_type="natural")(t_std)
+        # Use Kalman smoothed results directly (already uniformly sampled in time)
+        t_std = t
+        pos_std = means[:, 0, :]
+        vel_std = means[:, 1, :]
+        acc_std = means[:, 2, :]
 
         return EstimatorOutput(
-            t_std=t_std, pos=pos_std, vel=vel_std, acc=acc_std, sigma=sigma_std
+            t_std=t_std, pos=pos_std, vel=vel_std, acc=acc_std, sigma=sigma
         )
 
 
@@ -252,6 +276,12 @@ class SplineEstimator:
         vx = spline_derivative_analytical(t_std, x_std, order=1)
         vy = spline_derivative_analytical(t_std, y_std, order=1)
         vz = spline_derivative_analytical(t_std, z_std, order=1)
+
+        # Fix start point velocity using local quadratic fit (avoids spline boundary artifacts)
+        vx[0] = local_initial_derivative(t_std, x_std)
+        vy[0] = local_initial_derivative(t_std, y_std)
+        vz[0] = local_initial_derivative(t_std, z_std)
+
         vel_std = np.stack([vx, vy, vz], axis=1)
 
         ax = spline_derivative_analytical(t_std, x_std, order=2)
@@ -274,18 +304,8 @@ class SplineEstimator:
         sigma_axis = np.std(res, axis=0)
         sigma_std = np.tile(sigma_axis, (t_std.size, 1))
 
-        # Optional smoothing of derivatives for stability
-        vx_s, ax_s = savgol_derivatives(
-            vel_std[:, 0], self.dt, self.window_rate, self.polyorder
-        )
-        vy_s, ay_s = savgol_derivatives(
-            vel_std[:, 1], self.dt, self.window_rate, self.polyorder
-        )
-        vz_s, az_s = savgol_derivatives(
-            vel_std[:, 2], self.dt, self.window_rate, self.polyorder
-        )
-        vel_std = np.stack([vx_s, vy_s, vz_s], axis=1)
-        acc_std = np.stack([ax_s, ay_s, az_s], axis=1)
+        # Optional smoothing removed to prevent double-differentiation error
+        # (Original code wrongly called savgol_derivatives on velocity, resulting in acceleration)
 
         return EstimatorOutput(
             t_std=t_std, pos=pos_std, vel=vel_std, acc=acc_std, sigma=sigma_std

@@ -13,7 +13,9 @@ from scipy.interpolate import CubicSpline
 from scipy.signal import savgol_filter
 
 
-def standardize_time_grid(t: np.ndarray, x: np.ndarray, dt: float = 0.01) -> Tuple[np.ndarray, np.ndarray]:
+def standardize_time_grid(
+    t: np.ndarray, x: np.ndarray, dt: float = 0.01666667
+) -> Tuple[np.ndarray, np.ndarray]:
     """Map irregularly-sampled time series to a fixed-step grid using CubicSpline.
 
     Steps:
@@ -168,4 +170,47 @@ def magnitude(vec_array: np.ndarray, axis: int = -1) -> np.ndarray:
     """
     vec_array = np.asarray(vec_array, dtype=float)
     return np.linalg.norm(vec_array, axis=axis)
+
+
+def local_initial_derivative(
+    t: np.ndarray, x: np.ndarray, n_points: int = 7, poly_deg: int = 2
+) -> float:
+    """Estimate the initial derivative (v at t=0) using a local polynomial fit.
+
+    This avoids the boundary effects often seen with global splines (e.g. natural BC zeroing out curvature).
+    For the start of a throw, a local quadratic fit is usually more physically realistic than a spline end-knot condition.
+
+    Args:
+        t: Time-series array (1D). Should be sorted.
+        x: Value array (1D).
+        n_points: Number of initial points to use for the fit (default=7).
+        poly_deg: Degree of polynomial (2=quadratic => constant accel assumption).
+
+    Returns:
+        v0: Estimated derivative dx/dt at the first time point.
+    """
+    if len(t) < n_points:
+        n_points = len(t)
+    if n_points < poly_deg + 1:
+        # Fallback to simple finite diff if not enough points
+        if len(t) >= 2:
+            return (x[1] - x[0]) / (t[1] - t[0])
+        return 0.0
+
+    # Extract the local window
+    t_local = t[:n_points]
+    x_local = x[:n_points]
+
+    # Shift time for numerical stability (fit relative to t[0])
+    dt_local = t_local - t_local[0]
+
+    # Fit polynomial: x(dt) = c0 + c1*dt + c2*dt^2 ...
+    # deriv at dt=0 is just c1
+    coeffs = np.polyfit(dt_local, x_local, poly_deg)
+
+    # polyfit returns [c_deg, ..., c1, c0] (highest power first)
+    # The coefficient of the linear term (power 1) is at index -(2) => coeffs[-2]
+    # For a degree 2 fit: [a, b, c] -> ax^2 + bx + c. derivative is 2ax + b. at x=0, derivative is b.
+
+    return coeffs[-2]
 

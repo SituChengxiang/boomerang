@@ -45,7 +45,9 @@ class PhysicsVerdict:
         self._reason: str = ""
         self._energy: Optional[np.ndarray] = None
 
-    def _extract_inputs(self, data: Any) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    def _extract_inputs(
+        self, data: Any
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """Extract t, pos, vel, acc, sigma from dict/EstimatorOutput/DataFrame-like."""
         if isinstance(data, dict):
             t = data.get("t") or data.get("time")
@@ -55,14 +57,19 @@ class PhysicsVerdict:
             sigma = data.get("sigma")
         else:
             # EstimatorOutput-like (attribute access)
-            t = getattr(data, "t_std", None) or getattr(data, "t", None)
+            # Avoid 'or' operator with numpy arrays (ambiguous truth value)
+            t = getattr(data, "t_std", None)
+            if t is None:
+                t = getattr(data, "t", None)
             pos = getattr(data, "pos", None)
             vel = getattr(data, "vel", None)
             acc = getattr(data, "acc", None)
             sigma = getattr(data, "sigma", None)
 
         if t is None or pos is None or vel is None or acc is None:
-            raise ValueError("Input must provide time, pos, vel, acc (and optional sigma)")
+            raise ValueError(
+                "Input must provide time, pos, vel, acc (and optional sigma)"
+            )
 
         t = np.asarray(t, dtype=float).ravel()
         pos = np.asarray(pos, dtype=float)
@@ -81,7 +88,9 @@ class PhysicsVerdict:
 
         return t, pos, vel, acc, sigma
 
-    def calculate_energies(self, t: np.ndarray, pos: np.ndarray, vel: np.ndarray) -> Dict[str, np.ndarray]:
+    def calculate_energies(
+        self, t: np.ndarray, pos: np.ndarray, vel: np.ndarray
+    ) -> Dict[str, np.ndarray]:
         """Compute kinetic, potential, and total energy using provided velocities."""
         v2 = np.sum(vel * vel, axis=1)
         ek = 0.5 * self.mass * v2
@@ -112,7 +121,13 @@ class PhysicsVerdict:
                 return int(i)
         return int(window[-1])
 
-    def determine_valid_range(self, t: np.ndarray, pos: np.ndarray, vel: np.ndarray, sigma: Optional[np.ndarray]) -> Tuple[int, int, str]:
+    def determine_valid_range(
+        self,
+        t: np.ndarray,
+        pos: np.ndarray,
+        vel: np.ndarray,
+        sigma: Optional[np.ndarray],
+    ) -> Tuple[int, int, str]:
         """Determine valid [start_idx, end_idx) based on physical rules."""
         energies = self.calculate_energies(t, pos, vel)
         et = energies["E"]
@@ -127,7 +142,9 @@ class PhysicsVerdict:
         if rebound_mask.any():
             streak = 0
             for i in range(start_idx, t.size):
-                if rebound_mask[i] and (et[i] - et[start_idx]) > self.energy_tol * max(abs(et[start_idx]), 1.0):
+                if rebound_mask[i] and (et[i] - et[start_idx]) > self.energy_tol * max(
+                    abs(et[start_idx]), 1.0
+                ):
                     streak += 1
                     if streak >= 3:
                         end_idx = i
@@ -166,7 +183,9 @@ class PhysicsVerdict:
         energies = self.calculate_energies(t, pos, vel)
         self._energy = energies["E"]
 
-        valid_duration = float(t[end_idx - 1] - t[start_idx]) if end_idx > start_idx else 0.0
+        valid_duration = (
+            float(t[end_idx - 1] - t[start_idx]) if end_idx > start_idx else 0.0
+        )
         initial_energy = float(energies["E"][start_idx])
 
         return VerdictReport(
@@ -179,7 +198,12 @@ class PhysicsVerdict:
 
     def get_clean_trajectory(self) -> Dict[str, np.ndarray]:
         """Return trimmed trajectory without modifying values."""
-        if self._t is None or self._pos is None or self._vel is None or self._acc is None:
+        if (
+            self._t is None
+            or self._pos is None
+            or self._vel is None
+            or self._acc is None
+        ):
             raise RuntimeError("Call evaluate() before get_clean_trajectory().")
 
         sl = slice(self._start_idx, self._end_idx)
@@ -198,7 +222,7 @@ class PhysicsVerdict:
         if self._energy is None:
             raise RuntimeError("Call evaluate() before get_verdict_report().")
 
-        valid_duration = float(self._t[self._end_idx - 1] - self._t[self._start_idx]) # pyright: ignore[reportOptionalSubscript]
+        valid_duration = float(self._t[self._end_idx - 1] - self._t[self._start_idx])  # pyright: ignore[reportOptionalSubscript]
         return {
             "valid_duration": valid_duration,
             "reason_for_termination": self._reason,

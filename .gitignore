@@ -6,7 +6,7 @@
 # Datasource local storage ignored files
 /dataSources/
 /data/interm/*SMR.csv
-/data/final/*opt.csv
+/data/final/
 /dataSources.local.xml
 /target/
 /.idea/

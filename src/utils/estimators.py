@@ -16,12 +16,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, WhiteKernel
 
-from .mathUtils import (
-    local_initial_derivative,
-    magnitude,
-    spline_derivative_analytical,
-    standardize_time_grid,
-)
+from . import mathUtils
 
 
 @dataclass
@@ -73,8 +68,8 @@ class KalmanEstimator:
     def __init__(
         self,
         em_iters: int = 10,
-        process_noise: float = 1e-4,
-        measurement_noise: float = 1e-2,
+        process_noise: float = 0.1,
+        measurement_noise: float = 0.001,
     ) -> None:
         self.em_iters = int(em_iters)
         self.process_noise = float(process_noise)
@@ -86,7 +81,18 @@ class KalmanEstimator:
             dt = 1e-6
 
         F, H = _constant_acceleration_matrices(dt)
-        Q = np.eye(3) * self.process_noise
+        # White-noise jerk model -> allows acceleration to drift smoothly
+        q = float(self.process_noise)
+        dt2 = dt * dt
+        dt3 = dt2 * dt
+        dt4 = dt2 * dt2
+        Q = q * np.array(
+            [
+                [dt4 / 4.0, dt3 / 2.0, dt2 / 2.0],
+                [dt3 / 2.0, dt2, dt],
+                [dt2 / 2.0, dt, 1.0],
+            ]
+        )
         R = np.array([[self.measurement_noise]])
 
         # Robust initial state estimation using weighted quadratic least squares
@@ -219,7 +225,7 @@ class GPREstimator:
         t_shift = t - t0
 
         # Use standardize_time_grid to define the unified grid
-        t_std, _ = standardize_time_grid(t_shift, pos[:, 0])
+        t_std, _ = mathUtils.standardize_time_grid(t_shift, pos[:, 0])
         r = t_std[:, None] - t_shift[None, :]
         r2 = r * r
 
@@ -268,25 +274,25 @@ class SplineEstimator:
     def estimate(self, t_raw: np.ndarray, pos_raw: np.ndarray) -> EstimatorOutput:
         t, pos = _validate_inputs(t_raw, pos_raw)
 
-        t_std, x_std = standardize_time_grid(t, pos[:, 0], dt=self.dt)
+        t_std, x_std = mathUtils.standardize_time_grid(t, pos[:, 0], dt=self.dt)
         y_std = CubicSpline(t - t[0], pos[:, 1], bc_type="natural")(t_std)
         z_std = CubicSpline(t - t[0], pos[:, 2], bc_type="natural")(t_std)
         pos_std = np.stack([x_std, y_std, z_std], axis=1)
 
-        vx = spline_derivative_analytical(t_std, x_std, order=1)
-        vy = spline_derivative_analytical(t_std, y_std, order=1)
-        vz = spline_derivative_analytical(t_std, z_std, order=1)
+        vx = mathUtils.spline_derivative_analytical(t_std, x_std, order=1)
+        vy = mathUtils.spline_derivative_analytical(t_std, y_std, order=1)
+        vz = mathUtils.spline_derivative_analytical(t_std, z_std, order=1)
 
         # Fix start point velocity using local quadratic fit (avoids spline boundary artifacts)
-        vx[0] = local_initial_derivative(t_std, x_std)
-        vy[0] = local_initial_derivative(t_std, y_std)
-        vz[0] = local_initial_derivative(t_std, z_std)
+        vx[0] = mathUtils.local_initial_derivative(t_std, x_std)
+        vy[0] = mathUtils.local_initial_derivative(t_std, y_std)
+        vz[0] = mathUtils.local_initial_derivative(t_std, z_std)
 
         vel_std = np.stack([vx, vy, vz], axis=1)
 
-        ax = spline_derivative_analytical(t_std, x_std, order=2)
-        ay = spline_derivative_analytical(t_std, y_std, order=2)
-        az = spline_derivative_analytical(t_std, z_std, order=2)
+        ax = mathUtils.spline_derivative_analytical(t_std, x_std, order=2)
+        ay = mathUtils.spline_derivative_analytical(t_std, y_std, order=2)
+        az = mathUtils.spline_derivative_analytical(t_std, z_std, order=2)
         acc_std = np.stack([ax, ay, az], axis=1)
 
         # sigma from residuals between spline and raw data, projected to t_std

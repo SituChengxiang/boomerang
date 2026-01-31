@@ -45,8 +45,9 @@ class PhysicsVerdict:
         self._reason: str = ""
         self._energy: Optional[np.ndarray] = None
 
+    @staticmethod
     def _extract_inputs(
-        self, data: Any
+            data: Any
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """Extract t, pos, vel, acc, sigma from dict/EstimatorOutput/DataFrame-like."""
         if isinstance(data, dict):
@@ -111,7 +112,7 @@ class PhysicsVerdict:
         if abs(e0 - e_ref) / scale <= self.energy_tol:
             return 0
 
-        # Find earliest index within first 0.2s that stabilizes
+        # Find the earliest index within first 0.2s that stabilizes
         cutoff = float(t[0] + 0.2)
         window = np.where(t <= cutoff)[0]
         if window.size == 0:
@@ -128,41 +129,82 @@ class PhysicsVerdict:
         vel: np.ndarray,
         sigma: Optional[np.ndarray],
     ) -> Tuple[int, int, str]:
-        """Determine valid [start_idx, end_idx) based on physical rules."""
+        """Determine valid [start_idx, end_idx) based on dE/dt power analysis.
+
+        Assumption: The input trajectory is already roughly confined to "release" to "catch" phase.
+        We trim specific outliers where dE/dt exceeds physical limits caused by tracker noise.
+        """
         energies = self.calculate_energies(t, pos, vel)
-        et = energies["E"]
-        dE_dt = energies["dE_dt"]
+        # Calculate specific power [W/kg] = dE/dt
+        power = energies["dE_dt"]
+        abs_power = np.abs(power)
 
-        start_idx = self.diagnose_launch(t, et)
-        end_idx = t.size
-        reason = "OK"
+        # Adaptive thresholding:
+        # Use median absolute power as a baseline for "normal" aerodynamic work.
+        # Spikes > 4x Median are likely tracker noise (non-physical).
+        median_power = float(np.median(abs_power))
+        # Ensure a minimal floor for very smooth flights to avoid over-trimming
+        # Lowered to 0.5 W/kg based on observed data (mean ~0.2, max ~0.95)
+        baseline = max(median_power, 0.5)
+        power_threshold = 3.0 * baseline
 
-        # Rule A: Energy rebound (positive dE/dt) sustained
-        rebound_mask = dE_dt > 0
-        if rebound_mask.any():
-            streak = 0
-            for i in range(start_idx, t.size):
-                if rebound_mask[i] and (et[i] - et[start_idx]) > self.energy_tol * max(
-                    abs(et[start_idx]), 1.0
+        # --- Start Trimming ---
+        # Scan from start: aggressive trim if initial power is huge (launch artifacts)
+        start_idx = 0
+        for i in range(min(len(t) // 3, 20)):  # Only check first few frames
+            if abs_power[i] > power_threshold:
+                start_idx = i + 1
+            else:
+                # Once we find a good frame, assume launch artifact is over
+                # Check 2 more frames ahead to be sure
+                if (
+                    i + 2 < len(t)
+                    and abs_power[i + 1] < power_threshold
+                    and abs_power[i + 2] < power_threshold
                 ):
-                    streak += 1
-                    if streak >= 3:
-                        end_idx = i
-                        reason = "Energy Spike"
-                        break
-                else:
-                    streak = 0
+                    start_idx = i
+                    break
 
-        # Rule B: Uncertainty (sigma)
-        if end_idx == t.size and sigma is not None:
+        # --- End Trimming ---
+        # Scan from end: trim backward if final power is huge (impact/catch artifacts)
+        end_idx = t.size
+        for i in range(t.size - 1, max(t.size - 20, start_idx + 10), -1):
+            if abs_power[i] > power_threshold:
+                end_idx = i
+            else:
+                # Found a valid frame from the back
+                if (
+                    i - 2 > start_idx
+                    and abs_power[i - 1] < power_threshold
+                    and abs_power[i - 2] < power_threshold
+                ):
+                    end_idx = i + 1  # Include this valid frame
+                    break
+
+        reason = "OK"
+        if start_idx > 0:
+            reason = "Launch Artifact Trimmed"
+        if end_idx < t.size:
+            reason += " & End Spike Trimmed" if start_idx > 0 else "End Spike Trimmed"
+
+        # Rule B: Uncertainty (sigma) - fallback
+        if sigma is not None:
             if sigma.ndim == 2:
                 sigma_level = np.max(sigma, axis=1)
             else:
                 sigma_level = sigma
-            bad = np.where(sigma_level > self.sigma_threshold)[0]
-            if bad.size > 0:
-                end_idx = int(bad[0])
-                reason = "High Uncertainty"
+            # Only trim from the end based on sigma
+            valid_mask = sigma_level[:end_idx] <= self.sigma_threshold
+            # Find last valid index
+            if not valid_mask.all():
+                # Find the first violation after start_idx
+                bad_indices = np.where(~valid_mask)[0]
+                bad_after_start = bad_indices[bad_indices >= start_idx]
+                if bad_after_start.size > 0:
+                    new_end = int(bad_after_start[0])
+                    if new_end < end_idx:
+                        end_idx = new_end
+                        reason = "High Uncertainty"
 
         return start_idx, max(end_idx, start_idx + 1), reason
 
@@ -196,7 +238,7 @@ class PhysicsVerdict:
             end_idx=end_idx,
         )
 
-    def get_clean_trajectory(self) -> Dict[str, np.ndarray]:
+    def get_clean_trajectory(self) -> dict[str, type[None[Any]]]: # pyright: ignore[reportInvalidTypeArguments]
         """Return trimmed trajectory without modifying values."""
         if (
             self._t is None
@@ -215,7 +257,7 @@ class PhysicsVerdict:
         }
         if self._sigma is not None:
             out["sigma"] = self._sigma[sl]
-        return out
+        return out # pyright: ignore[reportReturnType]
 
     def get_verdict_report(self) -> Dict[str, float | str | int]:
         """Return verdict report as dict."""

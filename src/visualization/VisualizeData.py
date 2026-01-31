@@ -19,20 +19,26 @@ def analyze_track(df, track_name):
     vx = df.vx.values
     vy = df.vy.values
     vz = df.vz.values
+    
+    # Use ax, ay, az from CSV if available, otherwise compute them
+    if "ax" in df.columns and "ay" in df.columns and "az" in df.columns:
+        ax_val = df.ax.values
+        ay_val = df.ay.values
+        az_val = df.az.values
+    else:
+        # Fallback to computing smooth acceleration if not present
+        # Using savgol filter again for smooth derivatives
+        dt = np.mean(np.diff(t))
+        window = min(11, len(t))
+        if window % 2 == 0:
+            window -= 1
+        if window < 5:
+            window = 3
 
-    # calculate smooth acceleration (force/mass)
-    # Using savgol filter again for smooth derivatives
-    dt = np.mean(np.diff(t))
-    window = min(11, len(t))
-    if window % 2 == 0:
-        window -= 1
-    if window < 5:
-        window = 3
-
-    dt_float = float(dt)
-    ax = savgol_filter(vx, window, 3, deriv=1, delta=dt_float)
-    ay = savgol_filter(vy, window, 3, deriv=1, delta=dt_float)
-    az = savgol_filter(vz, window, 3, deriv=1, delta=dt_float)
+        dt_float = float(dt)
+        ax_val = savgol_filter(vx, window, 3, deriv=1, delta=dt_float)
+        ay_val = savgol_filter(vy, window, 3, deriv=1, delta=dt_float)
+        az_val = savgol_filter(vz, window, 3, deriv=1, delta=dt_float)
 
     # Physics Variables
     v_xy_sq = vx**2 + vy**2
@@ -44,12 +50,12 @@ def analyze_track(df, track_name):
     # So: Lift_z_accel + Drag_z_accel = az + g
     # Assuming Drag_z is small compared to Lift_z in hover, but let's just look at Net Aerodynamic Vertical Force
     # F_aero_z / m = az + G
-    f_z_aero = az + G
+    f_z_aero = az_val + G
 
     # 2. Drag Analysis
     # Tangential acceleration (along velocity vector)
     # a_tan = dot(a, v) / |v|
-    a_tan = (ax * vx + ay * vy + az * vz) / (v_abs + 1e-6)
+    a_tan = (ax_val * vx + ay_val * vy + az_val * vz) / (v_abs + 1e-6)
     # Drag is roughly -a_tan (retarding force), but Gravity also has a component along path.
     # a_tan_measured = a_drag + a_gravity_tangent
     # a_gravity_tangent = -g * (vz / v_abs)  (since g points down -z)

@@ -50,7 +50,11 @@ def plot_3d_trajectory_compare(
     x_fit: Optional[NDArray[np.float64]] = None,
     y_fit: Optional[NDArray[np.float64]] = None,
     z_fit: Optional[NDArray[np.float64]] = None,
+    x_final: Optional[NDArray[np.float64]] = None,
+    y_final: Optional[NDArray[np.float64]] = None,
+    z_final: Optional[NDArray[np.float64]] = None,
     labels: Tuple[str, str, str] = ("Raw", "Smoothed", "Fitted"),
+    final_label: str = "Final Points",
 ) -> plt.Figure:  # pyright: ignore[reportPrivateImportUsage]
     """Plot 3D trajectory comparison: Raw data vs Smoothed vs Fitted.
 
@@ -60,6 +64,8 @@ def plot_3d_trajectory_compare(
         x_smooth, y_smooth, z_smooth: Smoothed trajectory (optional)
         x_fit, y_fit, z_fit: Fitted/Integrated trajectory (optional)
         labels: Labels for the three trajectories
+        x_final, y_final, z_final: Final (trimmed) points to overlay (optional)
+        final_label: Label for final points
 
     Returns:
         Matplotlib figure with 3D plot
@@ -109,6 +115,20 @@ def plot_3d_trajectory_compare(
             label=labels[2],
         )
 
+    # Plot final trimmed points
+    if x_final is not None and y_final is not None and z_final is not None:
+        ax.scatter(
+            x_final,
+            y_final,
+            z_final,  # pyright: ignore[reportArgumentType]
+            c="#fff235",
+            s=28,
+            alpha=0.9,
+            marker="^",
+            linewidth=0.4,
+            label=final_label,
+        )
+
     # Mark start point
     ax.scatter(
         x_raw[0],
@@ -117,7 +137,6 @@ def plot_3d_trajectory_compare(
         c="#34a853",
         s=150,
         marker="*",
-        edgecolors="black",
         linewidth=1,
         label="Start",
     )

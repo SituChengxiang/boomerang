@@ -41,7 +41,7 @@ TRACK_META = {
 }
 
 
-def load_data(data_dir="data/interm"):
+def load_data(data_dir="data/final"):
     """使用统一的dataIO模块加载优化后的轨迹数据"""
     tracks = {}
 

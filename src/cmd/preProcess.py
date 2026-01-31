@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 
 # Add project root to Python path for absolute imports
 FILE_PATH = pathlib.Path(__file__).resolve()
@@ -62,7 +63,7 @@ class preProcessController:
 
         # Initialize modules
         self.estimator = KalmanEstimator(
-            em_iters=10, process_noise=1e-4, measurement_noise=1e-2
+            em_iters=10, process_noise=0.1, measurement_noise=0.001
         )
         self.verdict = PhysicsVerdict(
             mass=mass,
@@ -191,7 +192,7 @@ class preProcessController:
             print(f"[ERROR] Physics evaluation failed: {e}")
             raise
 
-    def visualize_energy(self) -> None:
+    def visualize_energy(self) -> Optional[Figure]:
         """Step 2: Create dual-axis energy plot."""
         if self.energies is None or self.estimated_state is None:
             raise RuntimeError("Must call evaluate_physics() before visualize_energy()")
@@ -271,7 +272,7 @@ class preProcessController:
 
         return fig
 
-    def visualize_3d_trajectory(self) -> None:
+    def visualize_3d_trajectory(self) -> Optional[Figure]:
         """Step 2: Compare raw data vs filtered/estimated trajectory in 3D."""
         if self.raw_data is None or self.estimated_state is None:
             raise RuntimeError(
@@ -293,6 +294,24 @@ class preProcessController:
         t_est = self.estimated_state.t_std
         pos_est = self.estimated_state.pos
 
+        # Try loading final trimmed points (if available)
+        final_x = final_y = final_z = None
+        final_path = PROJECT_ROOT / "data" / "final" / f"{self.csv_path.stem}opt.csv"
+        if final_path.exists():
+            try:
+                final_data = load_track(
+                    filepath=final_path,
+                    required_columns=["t", "x", "y", "z"],
+                    sort_by_time=True,
+                    clean_time=True,
+                    min_points=2,
+                )
+                final_x = final_data["x"]
+                final_y = final_data["y"]
+                final_z = final_data["z"]
+            except Exception as e:
+                print(f"[preProcess] Failed to load final points: {e}")
+
         # Create the 3D comparison plot
         fig = plot_3d_trajectory_compare(
             t=t_raw,
@@ -302,7 +321,11 @@ class preProcessController:
             x_smooth=pos_est[:, 0],  # ← 滤波后 X
             y_smooth=pos_est[:, 1],  # ← 滤波后 Y
             z_smooth=pos_est[:, 2],  # ← 滤波后 Z
+            x_final=final_x,
+            y_final=final_y,
+            z_final=final_z,
             labels=("Raw Data (Scatter)", "Filtered Trajectory", ""),
+            final_label="Final Trimmed Points",
         )
 
         # Show the plot
@@ -313,7 +336,7 @@ class preProcessController:
 
     def get_user_trim_range(
         self, start_hint: float, end_hint: float
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Step 3: Interactive CLI for selecting trim range.
 
         Returns:
@@ -396,7 +419,7 @@ class preProcessController:
         data_dict["speed"] = speed
 
         # Save
-        save_track(output_file, data_dict)
+        save_track(output_file, data_dict)  # pyright: ignore[reportArgumentType]
 
         print(f"[preProcess] Saved intermediate data to: {output_file}")
         return output_file
@@ -452,35 +475,35 @@ def main() -> None:
         controller = preProcessController(csv_path)
 
         # Step 1: Load and preprocess
-        raw_data = controller.load_and_preprocess()
+        controller.load_and_preprocess()
 
         # Step 2: Estimate state using L2 estimators
-        estimated_state = controller.estimate_state()
+        controller.estimate_state()
 
         # Step 3: Evaluate physics using L3
-        verdict_report = controller.evaluate_physics()
+        controller.evaluate_physics()
 
         # Step 3.5: Visualize energy (dual Y-axis), 3D trajectory comparison
-        fig1 = controller.visualize_energy()
-        fig2 = controller.visualize_3d_trajectory()
+        controller.visualize_energy()
+        controller.visualize_3d_trajectory()
         print("\n[preProcess] Showing plots (close windows to continue)...")
         plt.show()
 
         # Step 4: Mannual Intervention and Save intermediate data to interm folder
         interm_path = controller.save_intermediate()
-        start_hint = controller.estimated_state.t_std[
-            controller.verdict_report.start_idx
+        start_hint = controller.estimated_state.t_std[ # pyright: ignore[reportOptionalMemberAccess]
+            controller.verdict_report.start_idx # pyright: ignore[reportOptionalMemberAccess]
         ]
         end_idx = min(
-            controller.verdict_report.end_idx,
-            len(controller.estimated_state.t_std) - 1,
+            controller.verdict_report.end_idx, # pyright: ignore[reportOptionalMemberAccess]
+            len(controller.estimated_state.t_std) - 1, # pyright: ignore[reportOptionalMemberAccess]
         )
-        end_hint = controller.estimated_state.t_std[end_idx]
+        end_hint = controller.estimated_state.t_std[end_idx] # pyright: ignore[reportOptionalMemberAccess]
         start_select, end_select = controller.get_user_trim_range(start_hint, end_hint)
-        t_std = controller.estimated_state.t_std
-        pos = controller.estimated_state.pos
-        vel = controller.estimated_state.vel
-        acc = controller.estimated_state.acc
+        t_std = controller.estimated_state.t_std # pyright: ignore[reportOptionalMemberAccess]
+        pos = controller.estimated_state.pos # pyright: ignore[reportOptionalMemberAccess]
+        vel = controller.estimated_state.vel # pyright: ignore[reportOptionalMemberAccess]
+        acc = controller.estimated_state.acc # pyright: ignore[reportOptionalMemberAccess]
 
         # 找索引
         start_idx = int(np.argmin(np.abs(t_std - start_select)))

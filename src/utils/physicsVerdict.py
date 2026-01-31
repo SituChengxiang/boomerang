@@ -27,7 +27,7 @@ class PhysicsVerdict:
 
     def __init__(
         self,
-        mass: float = 0.005,
+        mass: float = 0.002183,
         energy_tol: float = 0.05,
         sigma_threshold: float = 1.0,
     ) -> None:

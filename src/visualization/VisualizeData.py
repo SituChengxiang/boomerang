@@ -19,7 +19,7 @@ def analyze_track(df, track_name):
     vx = df.vx.values
     vy = df.vy.values
     vz = df.vz.values
-    
+
     # Use ax, ay, az from CSV if available, otherwise compute them
     if "ax" in df.columns and "ay" in df.columns and "az" in df.columns:
         ax_val = df.ax.values
@@ -256,6 +256,147 @@ def plot_energy_change_rate(energy_data):
     plt.show()
 
 
+def plot_all_velocity_components_vs_time(tracks_data, df_all):
+    """Plot 8: All Velocity Components (vx, vy, vz) vs Time"""
+    fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+    cmap = plt.get_cmap("tab10")
+
+    # Collect all velocities to get consistent y-limits
+    all_vx, all_vy, all_vz = [], [], []
+
+    for i, track in enumerate(tracks_data.keys()):
+        df_track = df_all[df_all.track == track].sort_values(by="t")  # type: ignore[attr-defined]
+        if len(df_track) < 10:
+            continue
+        color = cmap(i % 10)
+
+        # Plot vx
+        axes[0].plot(df_track.t, df_track.vx, label=track, color=color, linewidth=1.5)
+        all_vx.extend(df_track.vx)
+        # Plot vy
+        axes[1].plot(df_track.t, df_track.vy, label=track, color=color, linewidth=1.5)
+        all_vy.extend(df_track.vy)
+        # Plot vz
+        axes[2].plot(df_track.t, df_track.vz, label=track, color=color, linewidth=1.5)
+        all_vz.extend(df_track.vz)
+
+    # Style settings for better readability
+    axes[0].set_title("Velocity Components vs Time", fontsize=14, fontweight="bold")
+    axes[0].set_ylabel("$v_x$ (m/s)", fontsize=11)
+    axes[0].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[0].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    axes[1].set_ylabel("$v_y$ (m/s)", fontsize=11)
+    axes[1].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[1].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    axes[2].set_xlabel("Time (s)", fontsize=11)
+    axes[2].set_ylabel("$v_z$ (m/s)", fontsize=11)
+    axes[2].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[2].axhline(0, color="k", linestyle="--", alpha=0.3, linewidth=1)
+    axes[2].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    # Add y-axis bounds for clarity
+    if all_vx and all_vy and all_vz:
+        axes[0].set_ylim(min(all_vx), max(all_vx))
+        axes[1].set_ylim(min(all_vy), max(all_vy))
+        axes[2].set_ylim(min(all_vz), max(all_vz))
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_pitch_angle_vs_time(tracks_data, df_all):
+    """Plot 10: Pitch Angle (θ) vs Time, where tan(θ) = vz / sqrt(vx² + vy²)"""
+    fig, ax = plt.subplots(figsize=(10, 8))
+    cmap = plt.get_cmap("tab10")
+
+    valid_tracks = []
+    for track in tracks_data.keys():
+        df_track = df_all[df_all.track == track].sort_values(by="t")
+        if len(df_track) < 10:
+            continue
+
+        vx = df_track.vx.values
+        vy = df_track.vy.values
+        vz = df_track.vz.values
+
+        # Calculate horizontal speed
+        v_horiz = np.sqrt(
+            vx**2 + vy**2 + 1e-10
+        )  # Add small epsilon to avoid division by zero
+
+        # Calculate pitch angle in radians: θ = arctan(vz / v_horiz)
+        theta = np.arctan2(vz, v_horiz)
+
+        # Convert to degrees for display
+        theta_deg = np.degrees(theta)
+
+        color = cmap(len(valid_tracks) % 10)
+        ax.plot(df_track.t, theta_deg, label=track, color=color, linewidth=1.5)
+        valid_tracks.append(track)
+
+    ax.set_title("Pitch Angle vs Time", fontsize=14, fontweight="bold")
+    ax.set_xlabel("Time (s)", fontsize=11)
+    ax.set_ylabel("Pitch Angle θ (degrees)", fontsize=11)
+    ax.grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    ax.axhline(0, color="k", linestyle="--", alpha=0.3, linewidth=1, label="Horizontal")
+    ax.legend(fontsize=8, loc="best", ncol=2, framealpha=0.9)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_all_acceleration_components_vs_time(tracks_data, df_all):
+    """Plot 9: All Acceleration Components (ax, ay, az) vs Time for multiple tracks"""
+    fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+    cmap = plt.get_cmap("tab10")
+
+    # Collect all velocities to get consistent y-limits
+    all_ax, all_ay, all_az = [], [], []
+
+    for i, track in enumerate(tracks_data.keys()):
+        df_track = df_all[df_all.track == track].sort_values(by="t")  # type: ignore[attr-defined]
+        if len(df_track) < 10:
+            continue
+        color = cmap(i % 10)
+
+        # Plot ax
+        axes[0].plot(df_track.t, df_track.ax, label=track, color=color, linewidth=1.5)
+        all_ax.extend(df_track.ax)
+        # Plot ay
+        axes[1].plot(df_track.t, df_track.ay, label=track, color=color, linewidth=1.5)
+        all_ay.extend(df_track.ay)
+        # Plot az
+        axes[2].plot(df_track.t, df_track.az, label=track, color=color, linewidth=1.5)
+        all_az.extend(df_track.az)
+
+    # Style settings for better readability
+    axes[0].set_title("Acceleration Components vs Time", fontsize=14, fontweight="bold")
+    axes[0].set_ylabel("$a_x$ (m/s)", fontsize=11)
+    axes[0].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[0].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    axes[1].set_ylabel("$a_y$ (m/s)", fontsize=11)
+    axes[1].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[1].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    axes[2].set_xlabel("Time (s)", fontsize=11)
+    axes[2].set_ylabel("$a_z$ (m/s)", fontsize=11)
+    axes[2].grid(True, alpha=0.5, linestyle="-", linewidth=0.5)
+    axes[2].axhline(0, color="k", linestyle="--", alpha=0.3, linewidth=1)
+    axes[2].legend(fontsize=7, loc="best", ncol=2, framealpha=0.9)
+
+    # Add y-axis bounds for clarity
+    if all_ax and all_ay and all_az:
+        axes[0].set_ylim(min(all_ax), max(all_ax))
+        axes[1].set_ylim(min(all_ay), max(all_ay))
+        axes[2].set_ylim(min(all_az), max(all_az))
+
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     try:
         df_all = pd.read_csv("data/interm/velocity.csv")
@@ -325,6 +466,18 @@ def main():
     # Plot 7: Energy Change Rate vs Time
     print("\n7. Energy Change Rate (dE/dt) vs Time")
     plot_energy_change_rate(energy_data)
+
+    # Plot 8: All Velocity Components (vx, vy, vz) vs Time
+    print("\n8. All Velocity Components (vx, vy, vz) vs Time")
+    plot_all_velocity_components_vs_time(tracks_data, df_all)
+
+    # Plot 9: All Acceleration Components (ax, ay, az) vs Time
+    print("\n9. All Acceleration Components (ax, ay, az) vs Time")
+    plot_all_acceleration_components_vs_time(tracks_data, df_all)
+
+    # Plot 10: Pitch Angle (θ) vs Time
+    print("\n10. Pitch Angle (θ) vs Time")
+    plot_pitch_angle_vs_time(tracks_data, df_all)
 
     print("\n=== Analysis Complete ===")
 

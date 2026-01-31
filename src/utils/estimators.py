@@ -324,5 +324,4 @@ __all__ = [
     "KalmanEstimator",
     "GPREstimator",
     "SplineEstimator",
-    "magnitude",
 ]

@@ -43,7 +43,7 @@ class preProcessController:
     def __init__(
         self,
         csv_path: str | pathlib.Path,
-        mass: float = 0.005,
+        mass: float = 0.002183,
         energy_tol: float = 0.05,
         sigma_threshold: float = 1.0,
         dt: float = 0.0166667,

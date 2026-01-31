@@ -93,3 +93,29 @@ def get_smoother_config() -> dict:
         "savgol_polyorder": 3,              # 多项式阶数
     }
 ```
+
+## 物理模型
+
+- **坐标系**：惯性系 $OXYZ$ + 本体系 $Oxyz$（质心为原点，$z$ 轴为自转轴）  
+- **气动力**：  
+  $$
+  F_L = \frac{1}{2} \rho v^2 C_L A,\quad F_D = \frac{1}{2} \rho v^2 C_D A
+  $$  
+- **力矩与进动**（BET + 陀螺效应）：  
+  $$
+  \tau = \frac{D}{2} \rho C_L \omega v a^3 d,\quad \Omega = \frac{\tau}{I_z \omega}
+  $$  
+- **运动微分方程**（本体系）：  
+  $$
+  \begin{aligned}
+  \dot{v}_x &= \frac{D \rho C_L \omega a^3 d}{2 I_z} v_y - \frac{\rho C_D A}{2m} v_x \\
+  \dot{v}_y &= -\frac{\rho A (C_L - C_D)}{2m} v_y \quad\text{（⚠️ 此项物理形式存疑）} \\
+  \dot{v}_z &= \frac{\rho A (C_L - C_D)}{2m} v_z - g
+  \end{aligned}
+  $$
+
+### 📏 实验对象参数（固定构型）  
+- 材料：半张 A4 纸折叠  
+- 几何：翼展 $a = 0.15\,\text{m}$，翼宽 $d = 0.028\,\text{m}$，夹角 $90^\circ$  
+- 质量：$m = 2.183\,\text{g}$  
+- 自转角速度实测范围：$\omega \in [85, 100]\,\text{rad/s}$

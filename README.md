@@ -320,3 +320,7 @@ def get_smoother_config() -> dict:
 
 如果你同意这个分析，我们可以开始按照你的思路修改代码：**用 6D MSE，定死 Tilt，放开 Sigma。**
 ```
+
+## TODOs
+
+- [] tilt变化的修复

@@ -62,7 +62,25 @@ def analyze_track(df, track_name):
     # So a_drag = a_tan_measured - (-g * vz / v_abs) = a_tan + g * vz / v_abs
     a_drag_est = a_tan + G * (vz / (v_abs + 1e-6))
 
-    return t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est
+    # 3. Horizontal perpendicular acceleration (centripetal acceleration in horizontal plane)
+    # Horizontal velocity components: vx, vy
+    # Horizontal acceleration components: ax, ay
+    # Horizontal speed: v_h = sqrt(vx^2 + vy^2)
+    # Horizontal centripetal acceleration: a_perp_h = |v_h × a_h| / v_h
+    # where v_h × a_h = vx * ay - vy * ax (scalar in z-direction)
+    v_h_sq = vx**2 + vy**2
+    v_h = np.sqrt(v_h_sq + 1e-12)
+    # Cross product magnitude in horizontal plane (z-component only)
+    v_cross_a_h = vx * ay_val - vy * ax_val
+    a_perp_h = np.abs(v_cross_a_h) / (v_h + 1e-6)
+
+    # 4. Power: P = F·v = m·a·v + m·g·v_z
+    # Dot product: a·v
+    a_dot_v = ax_val * vx + ay_val * vy + az_val * vz
+    # Power per unit mass: P/m = a·v + g·v_z
+    power_per_mass = a_dot_v + G * vz
+
+    return t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp_h, power_per_mass
 
 
 def calculate_energy(df, track_name):
@@ -91,7 +109,7 @@ def plot_vertical_aero_vs_horizontal_speed(tracks_data):
     cmap = plt.get_cmap("tab10")
 
     for i, (track, data) in enumerate(tracks_data.items()):
-        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est = data
+        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp, power_per_mass = data
         color = cmap(i % 10)
         ax.scatter(v_xy_sq, f_z_aero, s=5, alpha=0.5, label=track, color=color)
 
@@ -111,7 +129,7 @@ def plot_drag_deceleration_vs_total_speed(tracks_data):
     cmap = plt.get_cmap("tab10")
 
     for i, (track, data) in enumerate(tracks_data.items()):
-        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est = data
+        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp, power_per_mass = data
         color = cmap(i % 10)
         ax.scatter(v_total_sq, -a_drag_est, s=5, alpha=0.5, color=color, label=track)
 
@@ -151,7 +169,7 @@ def plot_vertical_aero_force_vs_time(tracks_data):
     cmap = plt.get_cmap("tab10")
 
     for i, (track, data) in enumerate(tracks_data.items()):
-        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est = data
+        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp, power_per_mass = data
         color = cmap(i % 10)
         ax.plot(t, f_z_aero, color=color, label=track)
 
@@ -397,6 +415,82 @@ def plot_all_acceleration_components_vs_time(tracks_data, df_all):
     plt.show()
 
 
+def plot_perpendicular_acceleration_vs_time(tracks_data):
+    """Plot Perpendicular Acceleration (Centripetal Acceleration) vs Time"""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax_vh = ax.twinx()
+    cmap = plt.get_cmap("tab10")
+
+    for i, (track, data) in enumerate(tracks_data.items()):
+        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp_h, power_per_mass = data
+        color = cmap(i % 10)
+        ax.plot(t, a_perp_h, label=track, color=color, alpha=0.7, linewidth=1.5)
+
+        # Overlay horizontal speed on right axis to diagnose sensitivity when v_h is small
+        v_h = np.sqrt(np.asarray(v_xy_sq, dtype=float) + 1e-12)
+        label_vh = r"$v_h$ (right axis)" if i == 0 else "_nolegend_"
+        ax_vh.plot(t, v_h, color=color, linestyle="--", alpha=0.22, linewidth=1.0, label=label_vh)
+
+    ax.set_title("Horizontal Centripetal Acceleration & Horizontal Speed vs Time")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Perpendicular Acceleration ($m/s^2$)")
+    ax_vh.set_ylabel(r"Horizontal Speed $v_h$ (m/s)")
+    ax.grid(True, alpha=0.3)
+    # Unified legend (avoid duplicating per-track v_h entries)
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax_vh.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="best")
+    ax.set_ylim(bottom=0)  # Perpendicular acceleration should be non-negative
+
+    # Add explanation text
+    ax.text(
+        0.02,
+        0.98,
+        r"$a_{\perp,h} = |v_x a_y - v_y a_x| / v_h$  ,  $v_h=\sqrt{v_x^2+v_y^2}$",
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_power_vs_time(tracks_data):
+    """Plot Power vs Time"""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    cmap = plt.get_cmap("tab10")
+
+    for i, (track, data) in enumerate(tracks_data.items()):
+        t, v_xy_sq, f_z_aero, v_total_sq, a_drag_est, a_perp_h, power_per_mass = data
+        color = cmap(i % 10)
+        # Convert power per mass to actual power (W)
+        power = MASS * power_per_mass
+        ax.plot(t, power, label=track, color=color, alpha=0.7, linewidth=1.5)
+
+    ax.set_title("Power vs Time")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Power (W)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc="best")
+    ax.axhline(0, color="k", linestyle="--", alpha=0.5, linewidth=0.8)
+
+    # Add explanation text
+    ax.text(
+        0.02,
+        0.98,
+        r"$P = \mathbf{F} \cdot \mathbf{v} = m(\mathbf{a} \cdot \mathbf{v} + g v_z)$",
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     try:
         df_all = pd.read_csv("data/interm/velocity.csv")
@@ -478,6 +572,14 @@ def main():
     # Plot 10: Pitch Angle (θ) vs Time
     print("\n10. Pitch Angle (θ) vs Time")
     plot_pitch_angle_vs_time(tracks_data, df_all)
+
+    # Plot 11: Perpendicular Acceleration vs Time
+    print("\n11. Perpendicular Acceleration vs Time")
+    plot_perpendicular_acceleration_vs_time(tracks_data)
+
+    # Plot 12: Power vs Time
+    print("\n12. Power vs Time")
+    plot_power_vs_time(tracks_data)
 
     print("\n=== Analysis Complete ===")
 

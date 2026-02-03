@@ -13,6 +13,78 @@ from scipy.interpolate import CubicSpline
 from scipy.signal import savgol_filter
 
 
+def safe_unit_vector(vec: np.ndarray, fallback: np.ndarray = None) -> np.ndarray:  # type: ignore
+    """Compute unit vector with fallback for zero/near-zero vectors.
+
+    Args:
+        vec: Input vector (1D array)
+        fallback: Fallback unit vector if input is zero/near-zero
+
+    Returns:
+        Unit vector, or fallback if input is invalid
+    """
+    vec = np.asarray(vec, dtype=float)
+    if vec.ndim != 1:
+        raise ValueError("Input must be a 1D vector")
+
+    nrm = float(np.linalg.norm(vec))
+    if not np.isfinite(nrm) or nrm < 1e-12:
+        if fallback is None:
+            fallback = np.zeros_like(vec)
+            fallback[0] = 1.0  # Default to x-axis
+        return fallback
+    return vec / nrm
+
+
+def savgol_window(n: int, desired: int = 21, poly: int = 3) -> int | None:
+    """Pick a valid Savitzky-Golay window length for n samples."""
+    if n <= 0:
+        return None
+    w = min(desired, n)
+    if w % 2 == 0:
+        w -= 1
+    if w < poly + 2:
+        return None
+    return w
+
+
+def derivatives_smooth(
+    t: np.ndarray, y: np.ndarray, poly: int = 3
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (dy/dt, d2y/dt2) using Savitzky-Golay when possible.
+
+    Falls back to numpy.gradient for short or irregular sequences.
+    """
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if t.size != y.size or t.size < 3:
+        dy = np.gradient(y)
+        d2y = np.gradient(dy)
+        return dy, d2y
+
+    dt = np.diff(t)
+    dt_med = float(np.median(dt)) if dt.size else 0.0
+    if (not np.isfinite(dt_med)) or dt_med <= 0:
+        dy = np.gradient(y, t)
+        d2y = np.gradient(dy, t)
+        return dy, d2y
+
+    window = savgol_window(int(t.size), desired=21, poly=poly)
+    if window is None:
+        dy = np.gradient(y, t)
+        d2y = np.gradient(dy, t)
+        return dy, d2y
+
+    dy = savgol_filter(y, window, poly, deriv=1, delta=dt_med)
+    d2y = savgol_filter(y, window, poly, deriv=2, delta=dt_med)
+    return dy, d2y
+
+
+def unwrap_angle_rad(theta: np.ndarray) -> np.ndarray:
+    theta = np.asarray(theta, dtype=float)
+    return np.unwrap(theta)
+
+
 def standardize_time_grid(
     t: np.ndarray, x: np.ndarray, dt: float = 0.01666667
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -213,4 +285,3 @@ def local_initial_derivative(
     # For a degree 2 fit: [a, b, c] -> ax^2 + bx + c. derivative is 2ax + b. at x=0, derivative is b.
 
     return coeffs[-2]
-

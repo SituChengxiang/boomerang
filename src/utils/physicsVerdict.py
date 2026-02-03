@@ -47,7 +47,7 @@ class PhysicsVerdict:
 
     @staticmethod
     def _extract_inputs(
-            data: Any
+        data: Any,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """Extract t, pos, vel, acc, sigma from dict/EstimatorOutput/DataFrame-like."""
         if isinstance(data, dict):
@@ -238,7 +238,7 @@ class PhysicsVerdict:
             end_idx=end_idx,
         )
 
-    def get_clean_trajectory(self) -> dict[str, type[None[Any]]]: # pyright: ignore[reportInvalidTypeArguments]
+    def get_clean_trajectory(self) -> dict[str, type[None[Any]]]:  # pyright: ignore[reportInvalidTypeArguments]
         """Return trimmed trajectory without modifying values."""
         if (
             self._t is None
@@ -257,7 +257,7 @@ class PhysicsVerdict:
         }
         if self._sigma is not None:
             out["sigma"] = self._sigma[sl]
-        return out # pyright: ignore[reportReturnType]
+        return out  # pyright: ignore[reportReturnType]
 
     def get_verdict_report(self) -> Dict[str, float | str | int]:
         """Return verdict report as dict."""

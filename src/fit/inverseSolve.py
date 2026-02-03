@@ -11,20 +11,29 @@ PROJECT_ROOT = FILE_PATH.parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.utils.aerodynamics import (
+    calculate_effective_coefficients,
+    calculate_net_aerodynamic_force,
+    decompose_aerodynamic_force,
+)
 from src.utils.dataIO import load_track
+from src.utils.physicsCons import (
+    CHOR,
+    MASS,
+    OMEGA0,
+    OMEGA_DECAY,
+    RHO,
+    SIGMA_ROTATION,
+    A,
+    G,
+)
 
-# Parameters from user
-m = 2.183e-3  # kg
-a = 0.15  # m (arm length)
-d = 0.028  # m (arm width)
-S = 2 * a * d  # m^2, roughtly planform area. 2 wings * length * width
-rho = 1.225  # kg/m^3
-g = 9.793  # m/s^2
-
-# Rotation parameters
-SIGMA_ROTATION = 0.4  # Rotary lift contribution factor
-OMEGA0 = 85.0  # rad/s, initial rotation
-OMEGA_DECAY = 0.15  # rad/s^2, realistic decay rate (τ ≈ 20s for omega0=85)
+# Use constants from physicsCons
+m = MASS
+a = A
+d = CHOR
+rho = RHO
+g = G
 
 # Batch configuration
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "final"
@@ -47,46 +56,27 @@ def solve_coefficients(file_path):
     # Extract vectors
     a_vec = np.column_stack((data["ax"], data["ay"], data["az"]))
     v_vec = np.column_stack((data["vx"], data["vy"], data["vz"]))
-    speed = data["speed"]
     t = data["t"]
 
-    # 1. Net Force (Newtons)
-    # F_net = m * a
-    F_net = m * a_vec
+    # 1-3. Calculate net aerodynamic force using shared function
+    F_aero, speed_calculated = calculate_net_aerodynamic_force(a_vec, v_vec, m)
 
-    # 2. Gravity Vector (Newtons)
-    # gravity is [0, 0, -g]
-    F_g = np.zeros_like(F_net)
-    F_g[:, 2] = -g * m
+    # 4. Decompose aerodynamic force using shared function
+    F_components = decompose_aerodynamic_force(F_aero, v_vec, speed_calculated)
 
-    # 3. Aerodynamic Force Vector
-    # F_net = F_aero + F_g  =>  F_aero = F_net - F_g
-    F_aero = F_net - F_g
+    # Extract components for backward compatibility
+    f_parallel = F_components["F_t"]  # Tangential component
+    F_t = f_parallel
+    F_n = F_components["F_n"]  # Normal component (horizontal)
+    F_z = F_components["F_z"]  # Vertical component
 
-    # 4. Decompose F_aero into Lift and Drag
-    # Drag is parallel to velocity (opposite direction)
-    # Lift is perpendicular to velocity
-
-    valid_mask = speed > 0.05
-    v_hat = np.zeros_like(v_vec)
-    v_hat[valid_mask] = v_vec[valid_mask] / speed[valid_mask, np.newaxis]
-
-    # Decompose aerodynamic force into components parallel/perpendicular to velocity.
-    # F_parallel = (F_aero · v_hat) v_hat
-    # F_perp     = F_aero - F_parallel
-    #
-    # NOTE: If (F_aero · v_hat) > 0, the force has a component *along* the velocity
-    # direction (a "thrust proxy"). For a passive boomerang this is typically caused by
-    # measurement noise, smoothing artifacts, wind, or axis/sign inconsistencies.
-    f_parallel = np.einsum("ij,ij->i", F_aero, v_hat)
-    F_parallel_vec = f_parallel[:, np.newaxis] * v_hat
-    F_lift_vec = F_aero - F_parallel_vec  # strictly perpendicular to v_hat
-
-    # Magnitudes
+    # Calculate lift magnitude (perpendicular to velocity)
+    F_lift_vec = F_aero - f_parallel[:, np.newaxis] * (
+        v_vec / speed_calculated[:, np.newaxis]
+    )
     L_mag = np.linalg.norm(F_lift_vec, axis=1)
 
-    # Drag magnitude is the *opposing* (negative) parallel component.
-    # Keep a signed version for diagnostics; use a physical (non-negative) version for Cd.
+    # Drag magnitude is the *opposing* (negative) parallel component
     D_mag_signed = -f_parallel
     D_mag = np.maximum(D_mag_signed, 0.0)
     thrust_mag = np.maximum(f_parallel, 0.0)
@@ -94,17 +84,16 @@ def solve_coefficients(file_path):
     # 5. Calculate Coefficients with Rotational Correction
     # Omega Model: w(t) = w0 - k*t
     omega = np.maximum(OMEGA0 - OMEGA_DECAY * t, 0)
-
-    # Rotational Dynamic Pressure
-    # v_eff^2 = v^2 + (sigma * omega * a)^2
-    # This prevents singularity at low speed (Apex)
     v_rot = SIGMA_ROTATION * omega * a
-    v_eff_sq = speed**2 + v_rot**2
 
-    # q = 0.5 * rho * S * v_eff^2
-    # Note: We use constant Planform Area S now, effectively treating the
-    # rotary disc area interaction via 'sigma'.
-    dynamic_pressure = 0.5 * rho * S * v_eff_sq
+    # Calculate effective coefficients using shared function
+    coeffs = calculate_effective_coefficients(
+        F_components, speed_calculated, float(v_rot)
+    )
+    # Extract for backward compatibility
+    dynamic_pressure = coeffs["q"]
+    Cl = coeffs["C_n_eff"]  # Normal coefficient as lift coefficient
+    Cd_signed = coeffs["C_t_eff"]  # Tangential coefficient as drag coefficient
 
     Cl = np.zeros_like(L_mag)
     Cd = np.full_like(D_mag, np.nan, dtype=float)
@@ -118,11 +107,11 @@ def solve_coefficients(file_path):
     cd_ok = q_mask & (f_parallel <= 0)
     Cd[cd_ok] = D_mag[cd_ok] / dynamic_pressure[cd_ok]
 
-    # Store results
+    # Store results (including new components)
     results = pd.DataFrame(
         {
             "t": t,
-            "speed": speed,
+            "speed": speed_calculated,
             "omega": omega,
             "q_dynamic": dynamic_pressure,
             "f_parallel": f_parallel,
@@ -133,6 +122,12 @@ def solve_coefficients(file_path):
             "Cl": Cl,
             "Cd": Cd,
             "Cd_signed": Cd_signed,
+            "F_t": F_t,  # New components from aerodynamics module
+            "F_n": F_n,
+            "F_z": F_z,
+            "C_n_eff": coeffs["C_n_eff"],
+            "C_z_eff": coeffs["C_z_eff"],
+            "C_t_eff": coeffs["C_t_eff"],
         }
     )
 

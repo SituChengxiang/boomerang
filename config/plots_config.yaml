@@ -1,0 +1,144 @@
+# 可视化图表配置文件
+# 支持时间序列、散点图、双Y轴等多种图表类型
+
+vertical_aero_vs_speed:
+  type: scatter
+  name: vertical_aero_vs_speed
+  title: "Vertical Aero Acceleration vs Horizontal Speed Squared"
+  xlabel: "Horizontal Speed Squared (m²/s²)"
+  ylabel: "Vertical Acceleration + G (m/s²)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  ref_lines:
+    - y: 9.8
+      color: black
+      linestyle: "--"
+      alpha: 0.3
+      label: "1G Hover"
+
+drag_deceleration:
+  type: scatter
+  name: drag_deceleration
+  title: "Drag Deceleration vs Total Speed Squared"
+  xlabel: "Total Speed Squared (m²/s²)"
+  ylabel: "Drag Deceleration (m/s²)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+
+vertical_velocity:
+  type: time_series
+  name: vertical_velocity
+  title: "Vertical Velocity vs Time"
+  xlabel: "Time (s)"
+  ylabel: "v_z (m/s)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  show_zero_line: true
+
+vertical_aero_force:
+  type: time_series
+  name: vertical_aero_force
+  title: "Vertical Aero Force vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Lift Acceleration (m/s²)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  ref_lines:
+    - y: 9.8
+      color: black
+      linestyle: "--"
+      label: "Gravity Offset"
+
+mechanical_energy:
+  type: time_series
+  name: mechanical_energy
+  title: "Mechanical Energy vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Energy (m²/s²)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  styles:
+    default:
+      linewidth: 1.5
+
+energy_components:
+  type: time_series
+  name: energy_components
+  title: "Energy Components: Kinetic and Potential vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Energy per mass (m²/s²)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+
+energy_change_rate:
+  type: time_series
+  name: energy_change_rate
+  title: "Energy Change Rate vs Time"
+  xlabel: "Time (s)"
+  ylabel: "dE/dt per mass (m²/s³)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  show_zero_line: true
+
+velocity_components:
+  type: time_series
+  name: velocity_components
+  title: "Velocity Components vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Velocity (m/s)"
+  figsize: [12, 12]
+  grid: true
+  legend: true
+  show_zero_line: true
+
+acceleration_components:
+  type: time_series
+  name: acceleration_components
+  title: "Acceleration Components vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Acceleration (m/s²)"
+  figsize: [12, 12]
+  grid: true
+  legend: true
+  show_zero_line: true
+
+pitch_angle:
+  type: time_series
+  name: pitch_angle
+  title: "Pitch Angle vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Pitch Angle θ (degrees)"
+  figsize: [10, 8]
+  grid: true
+  legend: true
+  show_zero_line: true
+
+perpendicular_acceleration:
+  type: multi_axis
+  name: perpendicular_acceleration
+  title: "Horizontal Centripetal Acceleration & Horizontal Speed"
+  xlabel: "Time (s)"
+  ylabel: "Perpendicular Acceleration (m/s²)"
+  twin_axis: v_h
+  twin_ylabel: "Horizontal Speed v_h (m/s)"
+  figsize: [12, 8]
+  grid: true
+  legend: true
+
+power:
+  type: time_series
+  name: power
+  title: "Power vs Time"
+  xlabel: "Time (s)"
+  ylabel: "Power (W)"
+  figsize: [12, 8]
+  grid: true
+  legend: true
+  show_zero_line: true

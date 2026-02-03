@@ -12,27 +12,34 @@ PROJECT_ROOT = FILE_PATH.parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.Coefficient import (
+from src.utils.aerodynamics import lift_direction_from_spin_axis
+from src.utils.coefficient import (
     _coeff_summary,
     _eval_coeff,
     estimate_cl_cd,
 )
 from src.utils.dataIO import load_track
+from src.utils.kinematics import (
+    horizontal_centripetal_accel,
+    horizontal_centripetal_accel_signed,
+)
+from src.utils.mathUtils import safe_unit_vector
 
-# --- Physical Constants (matching inverseSolve.py) ---
-MASS = 2.183e-3
-G = 9.793
-RHO = 1.225
-A = 0.15  # radius
-CHOR = 0.028  # average chord
-S = 2 * A * CHOR  # Area
-I_z = (
-    MASS / 24 * (5 * A**2 + 2 * CHOR**2)
-)  # Rotational inertia (spin axis) approximation.
+# --- Physical Constants (using shared physicsCons.py) ---
+from src.utils.physicsCons import (
+    CHOR,
+    MASS,
+    OMEGA0,
+    RHO,
+    SIGMA_ROTATION,
+    A,
+    G,
+    I_z,
+    S,
+)
 
-SIGMA = 0.4  # Spin lift correction factor, guess
-OMEGA_DECAY = 0.1  # Angular velocity attenuation amplitude
-OMEGA0 = -80.0  # Initial angular velocity (- implies clock wise)
+# Use constants from physicsCons
+SIGMA = SIGMA_ROTATION  # Alias for backward compatibility
 
 TILT0 = 45  # Initial Facial angles, the boomerang and the ground
 
@@ -64,67 +71,14 @@ def _col_as_array(data, col_name: str) -> np.ndarray:
     return np.asarray(data[col_name])
 
 
-def _safe_unit(vec: np.ndarray, fallback: np.ndarray) -> np.ndarray:
-    nrm = float(np.linalg.norm(vec))
-    if not np.isfinite(nrm) or nrm < 1e-12:
-        return fallback
-    return vec / nrm
+# Use shared functions from utils
+# _safe_unit is now safe_unit_vector from mathUtils
+# _lift_dir_from_spin_axis is now lift_direction_from_spin_axis from aerodynamics
 
 
-def _lift_dir_from_spin_axis(s_hat: np.ndarray, v_hat: np.ndarray) -> np.ndarray:
-    """Lift direction from a body/spin axis.
-
-    For a CLOCKWISE spinning boomerang (viewed from above), the angular velocity
-    points downward (-Z by right-hand rule). The lift direction is:
-        lift_dir ∝ v × s (velocity cross spin axis)
-    This gives rightward turn for clockwise rotation with positive tilt.
-    """
-    lift_raw = np.cross(v_hat, s_hat)  # v × s for clockwise rotation
-    lift_dir = _safe_unit(lift_raw, np.array([0.0, 0.0, 1.0]))
-    return lift_dir
-
-
-def _horizontal_centripetal_accel(
-    t: np.ndarray, vx: np.ndarray, vy: np.ndarray
-) -> np.ndarray:
-    """Horizontal-plane centripetal acceleration magnitude a_perp_h.
-
-    a_perp_h = |v_h x a_h| / |v_h| = |vx*ay - vy*ax| / sqrt(vx^2+vy^2)
-    """
-    t = np.asarray(t, dtype=float)
-    vx = np.asarray(vx, dtype=float)
-    vy = np.asarray(vy, dtype=float)
-    if t.size < 3:
-        ax = np.gradient(vx)
-        ay = np.gradient(vy)
-    else:
-        ax = np.gradient(vx, t)
-        ay = np.gradient(vy, t)
-    v_h = np.sqrt(vx * vx + vy * vy + 1e-12)
-    v_cross_a_h = vx * ay - vy * ax
-    return np.abs(v_cross_a_h) / (v_h + 1e-6)
-
-
-def _horizontal_centripetal_accel_signed(
-    t: np.ndarray, vx: np.ndarray, vy: np.ndarray
-) -> np.ndarray:
-    """Signed horizontal-plane centripetal acceleration.
-
-    a_perp_h_signed = (v_h x a_h) / |v_h| = (vx*ay - vy*ax) / sqrt(vx^2+vy^2)
-    Positive/negative indicates turn direction in the horizontal plane.
-    """
-    t = np.asarray(t, dtype=float)
-    vx = np.asarray(vx, dtype=float)
-    vy = np.asarray(vy, dtype=float)
-    if t.size < 3:
-        ax = np.gradient(vx)
-        ay = np.gradient(vy)
-    else:
-        ax = np.gradient(vx, t)
-        ay = np.gradient(vy, t)
-    v_h = np.sqrt(vx * vx + vy * vy + 1e-12)
-    v_cross_a_h = vx * ay - vy * ax
-    return v_cross_a_h / (v_h + 1e-6)
+# Use shared functions from mathUtils
+# _horizontal_centripetal_accel is now horizontal_centripetal_accel from mathUtils
+# _horizontal_centripetal_accel_signed is now horizontal_centripetal_accel_signed from mathUtils
 
 
 def _calculate_lift(
@@ -247,7 +201,7 @@ def boomerang_ode(t, state, params):
     v_hat = v / speed
 
     s = np.array([sx, sy, sz], dtype=float)
-    s_hat = _safe_unit(s, np.array([0.0, 0.0, 1.0]))
+    s_hat = safe_unit_vector(s, np.array([0.0, 0.0, 1.0]))
 
     # 2. Angular Velocity (Spin)
     # Use signed omega for rotation direction; decay acts on magnitude.
@@ -261,7 +215,7 @@ def boomerang_ode(t, state, params):
     q = 0.5 * RHO * S * v_eff_sq
 
     # 4. Aerodynamic Forces
-    lift_dir = _lift_dir_from_spin_axis(s_hat, v_hat)
+    lift_dir = lift_direction_from_spin_axis(s_hat, v_hat)
     f_lift = _calculate_lift(cl_model, speed, q, lift_dir)
     f_drag = _calculate_drag(cd_model, speed, q, v_hat)
     f_aero = f_lift + f_drag
@@ -302,12 +256,12 @@ def simulate(params, initial_state, t_eval):
     # For a right-hand spinning boomerang thrown with tilt, the spin axis
     # tilts toward the thrower's left (perpendicular to velocity in XY plane).
     v0 = np.array([vx0, vy0, vz0], dtype=float)
-    v0_hat = _safe_unit(v0, np.array([1.0, 0.0, 0.0]))
+    v0_hat = safe_unit_vector(v0, np.array([1.0, 0.0, 0.0]))
     up = np.array([0.0, 0.0, 1.0])
-    side = _safe_unit(np.cross(up, v0_hat), np.array([0.0, 1.0, 0.0]))
+    side = safe_unit_vector(np.cross(up, v0_hat), np.array([0.0, 1.0, 0.0]))
     tilt = float(np.radians(initial_tilt_deg))
     s0 = np.cos(tilt) * up + np.sin(tilt) * side
-    s0 = _safe_unit(s0, up)
+    s0 = safe_unit_vector(s0, up)
     # Do NOT flip s0 - initial direction matters for lift direction (s × v)
     state0 = [x0, y0, z0, vx0, vy0, vz0, float(s0[0]), float(s0[1]), float(s0[2])]
 
@@ -345,7 +299,7 @@ def simulate(params, initial_state, t_eval):
                     f"      Partial integration from t={t0:.3f} to t={t1:.3f}, covering {np.sum(ok)}/{len(t_eval)} points"
                 )
             try:
-                y[:, ok] = sol.sol(t_eval[ok])
+                y[:, ok] = sol.sol
             except Exception as e:
                 if DEBUG:
                     print(f"      Error during interpolation: {e}")
@@ -405,14 +359,28 @@ def calculate_tilt_deg_from_s(
     return np.degrees(np.arccos(cos_tilt))
 
 
+def calculate_tilt_deg_from_velocity(vz: np.ndarray, vxy: np.ndarray) -> np.ndarray:
+    """Calculate trajectory tilt angle relative to ground from velocity.
+
+    Formula: tan(tilt) = vz / v_h where v_h = sqrt(vx^2 + vy^2)
+
+    Returns angle in [-90, 90] where:
+    - Positive tilt: ascending (vz > 0)
+    - 0°: level flight (vz = 0)
+    - Negative tilt: descending (vz < 0)
+    """
+    # Avoid division by zero
+    tilt_rad = np.arctan2(vz, vxy)
+    return np.degrees(tilt_rad)
+
+
 def visualize_fit(t_true, state_true, t_sim, state_sim, params, title="Trajectory Fit"):
     """
     Detailed visualization of the fit.
     state_true/sim shape: [x, y, z, vx, vy, vz, ...] at columns
     """
     x_true, y_true, z_true = state_true[:, 0], state_true[:, 1], state_true[:, 2]
-    vx_true, vy_true = state_true[:, 3], state_true[:, 4]
-
+    vx_true, vy_true, vz_true = state_true[:, 3], state_true[:, 4], state_true[:, 5]
     x_sim, y_sim, z_sim = state_sim[0], state_sim[1], state_sim[2]
     vx_sim, vy_sim = state_sim[3], state_sim[4]
 
@@ -501,7 +469,7 @@ def visualize_fit(t_true, state_true, t_sim, state_sim, params, title="Trajector
 
     # Unified Legend
     lines = [line_z_true, line_z_sim, line_h_true, line_h_sim]
-    labels = [str(l.get_label()) for l in lines]
+    labels = [str(line.get_label()) for line in lines]
     ax_z.legend(lines, labels, loc="upper left")
 
     # params: [Cl_model, Cd_model, D]
@@ -520,15 +488,19 @@ def visualize_fit(t_true, state_true, t_sim, state_sim, params, title="Trajector
 
     vxy_true = np.sqrt(vx_true * vx_true + vy_true * vy_true)
     vxy_sim = np.sqrt(vx_sim * vx_sim + vy_sim * vy_sim)
+    tilt_true = calculate_tilt_deg_from_velocity(vz_true, vxy_true)
 
     fig2, (ax_tilt, ax_vxy, ax_head) = plt.subplots(3, 1, figsize=(12, 9), sharex=True)
     ax_tilt.plot(t_sim, tilt_sim, "c-", linewidth=2, label="Tilt Sim (deg)")
+    ax_tilt.plot(
+        t_true, tilt_true, "c--", markersize=3, alpha=0.35, label="Tilt Measured (deg)"
+    )
     ax_tilt.set_ylabel("Tilt (deg)")
     ax_tilt.grid(True, alpha=0.3)
     ax_tilt.legend(loc="best")
 
     ax_vxy.plot(
-        t_true, vxy_true, "k.", markersize=3, alpha=0.35, label="|v_xy| Measured"
+        t_true, vxy_true, "b--", markersize=3, alpha=0.35, label="|v_xy| Measured"
     )
     ax_vxy.plot(t_sim, vxy_sim, "b-", linewidth=2, label="|v_xy| Sim")
     ax_vxy.set_ylabel("|v_xy| (m/s)")
@@ -616,10 +588,10 @@ def loss_function(params, t_target, pos_target, cl_fixed, cd_fixed, tilt_deg, om
     # Horizontal centripetal acceleration alignment (evidence-driven)
     vx_t, vy_t = pos_target[:, 3], pos_target[:, 4]
     vx_s, vy_s = sim_phase[3], sim_phase[4]
-    a_perp_t = _horizontal_centripetal_accel(t_target, vx_t, vy_t)
-    a_perp_s = _horizontal_centripetal_accel(t_target, vx_s, vy_s)
-    a_perp_t_signed = _horizontal_centripetal_accel_signed(t_target, vx_t, vy_t)
-    a_perp_s_signed = _horizontal_centripetal_accel_signed(t_target, vx_s, vy_s)
+    a_perp_t = horizontal_centripetal_accel(t_target, vx_t, vy_t)
+    a_perp_s = horizontal_centripetal_accel(t_target, vx_s, vy_s)
+    a_perp_t_signed = horizontal_centripetal_accel_signed(t_target, vx_t, vy_t)
+    a_perp_s_signed = horizontal_centripetal_accel_signed(t_target, vx_s, vy_s)
     v_h = np.sqrt(vx_t * vx_t + vy_t * vy_t + 1e-12)
     weight = v_h / (v_h + 0.5)  # downweight low v_h segments
     scale = (

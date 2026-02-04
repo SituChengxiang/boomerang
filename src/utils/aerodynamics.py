@@ -90,7 +90,9 @@ def decompose_aerodynamic_force(
 
 
 def calculate_effective_coefficients(
-    F_components: Dict[str, np.ndarray], speed: np.ndarray, v_rot: float = 0.0
+    F_components: Dict[str, np.ndarray],
+    speed: np.ndarray,
+    v_rot: float | np.ndarray = 0.0,
 ) -> Dict[str, np.ndarray]:
     """Calculate effective coefficients with optional rotational correction.
 
@@ -107,13 +109,15 @@ def calculate_effective_coefficients(
         - q: Dynamic pressure (with rotational correction)
     """
     # Calculate dynamic pressure with rotational correction
-    v_eff_sq = speed**2 + v_rot**2
+    # v_rot can be a scalar or an array aligned with speed.
+    v_rot_arr = np.asarray(v_rot, dtype=float)
+    v_eff_sq = speed**2 + v_rot_arr**2
     q = 0.5 * RHO * S * v_eff_sq
 
-    # Calculate effective coefficients
-    C_n_eff = np.zeros_like(F_components["F_n"])
-    C_z_eff = np.zeros_like(F_components["F_z"])
-    C_t_eff = np.zeros_like(F_components["F_t"])
+    # Calculate effective coefficients (use NaN outside valid q range)
+    C_n_eff = np.full_like(F_components["F_n"], np.nan, dtype=float)
+    C_z_eff = np.full_like(F_components["F_z"], np.nan, dtype=float)
+    C_t_eff = np.full_like(F_components["F_t"], np.nan, dtype=float)
 
     valid_mask = q > 1e-6
     C_n_eff[valid_mask] = F_components["F_n"][valid_mask] / q[valid_mask]
@@ -140,17 +144,24 @@ def find_optimal_v_rot(
     """
     best_v_rot = 0.0
     best_score = float("inf")
-    best_coeffs = {}
+    best_coeffs: Dict[str, np.ndarray] = {}
 
     for v_rot in v_rot_range:
         coeffs = calculate_effective_coefficients(F_components, speed, v_rot)
 
-        # Calculate "flatness" score (variance of coefficients)
-        # We want coefficients to be as constant as possible
+        # Calculate "flatness" score (variance of coefficients) on valid samples only.
+        # This avoids low-speed/low-q regions dominating the score.
+        q = coeffs.get("q")
+        if q is None:
+            continue
+        valid = (q > 1e-6) & (speed > 0.5)
+        if int(np.sum(valid)) < 8:
+            continue
+
         score = (
-            np.var(coeffs["C_n_eff"])
-            + np.var(coeffs["C_z_eff"])
-            + np.var(coeffs["C_t_eff"])
+            float(np.nanvar(coeffs["C_n_eff"][valid]))
+            + float(np.nanvar(coeffs["C_z_eff"][valid]))
+            + float(np.nanvar(coeffs["C_t_eff"][valid]))
         )
 
         if score < best_score:
@@ -296,10 +307,20 @@ def calculate_aerodynamic_coefficients_from_data(
     )
 
     # Calculate rotational velocity if provided
-    v_rot = 0.0
+    v_rot: float | np.ndarray = 0.0
     if omega is not None:
-        omega_scalar = omega[2]
-        v_rot = sigma * omega_scalar * A  # A is arm length from physicsCons
+        omega_arr = np.asarray(omega, dtype=float)
+        if omega_arr.ndim == 0:
+            omega_use = float(omega_arr)
+        elif omega_arr.ndim == 1:
+            omega_use = omega_arr
+        elif omega_arr.ndim == 2 and omega_arr.shape[1] == 3:
+            # If provided as Nx3 angular velocity vectors, use z-component by convention.
+            omega_use = omega_arr[:, 2]
+        else:
+            # Fallback: try to squeeze to 1D
+            omega_use = np.squeeze(omega_arr)
+        v_rot = sigma * omega_use * A  # A is arm length from physicsCons
 
     # Calculate coefficients
     coeffs = calculate_effective_coefficients(f_components, speed, v_rot)

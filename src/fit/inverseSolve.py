@@ -20,6 +20,7 @@ from src.utils.dataIO import load_track
 from src.utils.physicsCons import (
     CHOR,
     MASS,
+    S,
     OMEGA0,
     OMEGA_DECAY,
     RHO,
@@ -56,7 +57,7 @@ def solve_coefficients(file_path):
     # Extract vectors
     a_vec = np.column_stack((data["ax"], data["ay"], data["az"]))
     v_vec = np.column_stack((data["vx"], data["vy"], data["vz"]))
-    t = data["t"]
+    t = np.asarray(data["t"], dtype=float)
 
     # 1-3. Calculate net aerodynamic force using shared function
     F_aero, speed_calculated = calculate_net_aerodynamic_force(a_vec, v_vec, m)
@@ -71,9 +72,9 @@ def solve_coefficients(file_path):
     F_z = F_components["F_z"]  # Vertical component
 
     # Calculate lift magnitude (perpendicular to velocity)
-    F_lift_vec = F_aero - f_parallel[:, np.newaxis] * (
-        v_vec / speed_calculated[:, np.newaxis]
-    )
+    eps_v = 1e-6
+    v_hat = v_vec / (speed_calculated[:, np.newaxis] + eps_v)
+    F_lift_vec = F_aero - f_parallel[:, np.newaxis] * v_hat
     L_mag = np.linalg.norm(F_lift_vec, axis=1)
 
     # Drag magnitude is the *opposing* (negative) parallel component
@@ -86,26 +87,22 @@ def solve_coefficients(file_path):
     omega = np.maximum(OMEGA0 - OMEGA_DECAY * t, 0)
     v_rot = SIGMA_ROTATION * omega * a
 
-    # Calculate effective coefficients using shared function
-    coeffs = calculate_effective_coefficients(
-        F_components, speed_calculated, float(v_rot)
-    )
-    # Extract for backward compatibility
-    dynamic_pressure = coeffs["q"]
-    Cl = coeffs["C_n_eff"]  # Normal coefficient as lift coefficient
-    Cd_signed = coeffs["C_t_eff"]  # Tangential coefficient as drag coefficient
+    # Dynamic pressure with rotational correction (array)
+    v_eff_sq = speed_calculated**2 + v_rot**2
+    dynamic_pressure = 0.5 * rho * S * v_eff_sq
 
-    Cl = np.zeros_like(L_mag)
+    # Effective coefficients (horizontal normal / vertical / tangential) for diagnostics.
+    # Note: these are *not* the same as the traditional Cl/Cd derived from |F_perp| and drag.
+    coeffs = calculate_effective_coefficients(F_components, speed_calculated, v_rot)
+
+    # Classic Cl/Cd reconstruction (inverse-solve style) with epsilon-only protection.
+    eps_q = 1e-6
+    q_safe = dynamic_pressure + eps_q
+    Cl = L_mag / q_safe
+    Cd_signed = D_mag_signed / q_safe
     Cd = np.full_like(D_mag, np.nan, dtype=float)
-    Cd_signed = np.zeros_like(D_mag_signed, dtype=float)
-
-    # Avoid division by zero (though v_eff_sq shouldn't be zero with rotation)
-    q_mask = dynamic_pressure > 1e-6
-    Cl[q_mask] = L_mag[q_mask] / dynamic_pressure[q_mask]
-    Cd_signed[q_mask] = D_mag_signed[q_mask] / dynamic_pressure[q_mask]
-    # Only define physical Cd where drag opposes motion (no thrust proxy)
-    cd_ok = q_mask & (f_parallel <= 0)
-    Cd[cd_ok] = D_mag[cd_ok] / dynamic_pressure[cd_ok]
+    cd_ok = f_parallel <= 0.0
+    Cd[cd_ok] = D_mag[cd_ok] / q_safe[cd_ok]
 
     # Store results (including new components)
     results = pd.DataFrame(

@@ -516,14 +516,18 @@ def plot_heading_rate_consistency(tracks_data, df_all, max_tracks: int = 4):
     plt.show()
 
 
-def plot_aerodynamic_forces_analysis(tracks_data):
+def plot_aerodynamic_forces_analysis(df_all, tracks):
     """Plot aerodynamic forces decomposition and effective coefficients."""
     fig, axes = plt.subplots(4, 1, figsize=(14, 12))
 
-    for track_name, data in tracks_data.items():
-        # Extract kinematic data
-        acc = np.column_stack((data["ax"], data["ay"], data["az"]))
-        vel = np.column_stack((data["vx"], data["vy"], data["vz"]))
+    for track_name in tracks:
+        df_track = df_all[df_all.track == track_name].sort_values(by="t")  # type: ignore[attr-defined]
+        if len(df_track) < 10:
+            continue
+
+        acc = np.column_stack((df_track.ax.values, df_track.ay.values, df_track.az.values))
+        vel = np.column_stack((df_track.vx.values, df_track.vy.values, df_track.vz.values))
+        t = df_track.t.values
 
         # Calculate aerodynamic forces
         F_aero, speed = calculate_net_aerodynamic_force(acc, vel, MASS)
@@ -534,10 +538,18 @@ def plot_aerodynamic_forces_analysis(tracks_data):
 
         # Plot 1: Aerodynamic force components
         axes[0].plot(
-            data["t"], F_components["F_t"], "--", alpha=0.7, label=f"{track_name} F_t"
+            t,
+            F_components["F_t"],
+            "--",
+            alpha=0.7,
+            label=f"{track_name} F_t",
         )
         axes[0].plot(
-            data["t"], F_components["F_n"], "-", alpha=0.7, label=f"{track_name} F_n"
+            t,
+            F_components["F_n"],
+            "-",
+            alpha=0.7,
+            label=f"{track_name} F_n",
         )
         axes[0].set_ylabel("Force (N)")
         axes[0].set_title("Aerodynamic Force Components: Tangential vs Normal")
@@ -547,14 +559,14 @@ def plot_aerodynamic_forces_analysis(tracks_data):
         # Plot 2: Effective coefficients without rotation correction
         coeffs_no_rot = calculate_effective_coefficients(F_components, speed, 0.0)
         axes[1].plot(
-            data["t"],
+            t,
             coeffs_no_rot["C_n_eff"],
             "-",
             alpha=0.7,
             label=f"{track_name} C_n",
         )
         axes[1].plot(
-            data["t"],
+            t,
             coeffs_no_rot["C_t_eff"],
             "--",
             alpha=0.7,
@@ -566,14 +578,14 @@ def plot_aerodynamic_forces_analysis(tracks_data):
 
         # Plot 3: Effective coefficients with optimal rotation correction
         axes[2].plot(
-            data["t"],
+            t,
             coeffs["C_n_eff"],
             "-",
             alpha=0.7,
             label=f"{track_name} C_n (v_rot={optimal_v_rot:.2f})",
         )
         axes[2].plot(
-            data["t"],
+            t,
             coeffs["C_t_eff"],
             "--",
             alpha=0.7,
@@ -586,7 +598,7 @@ def plot_aerodynamic_forces_analysis(tracks_data):
         axes[2].grid(True)
 
         # Plot 4: Speed vs time for reference
-        axes[3].plot(data["t"], speed, "-", alpha=0.7, label=f"{track_name} speed")
+        axes[3].plot(t, speed, "-", alpha=0.7, label=f"{track_name} speed")
         axes[3].set_ylabel("Speed (m/s)")
         axes[3].set_title("Speed vs Time")
         axes[3].grid(True)
@@ -596,14 +608,18 @@ def plot_aerodynamic_forces_analysis(tracks_data):
     plt.show()
 
 
-def plot_rotational_correction_scan(tracks_data, v_rot_range=np.linspace(0, 5, 20)):
+def plot_rotational_correction_scan(df_all, tracks, v_rot_range=np.linspace(0, 5, 20)):
     """Plot how rotational correction affects coefficient flatness."""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    for track_name, data in tracks_data.items():
-        # Extract kinematic data
-        acc = np.column_stack((data["ax"], data["ay"], data["az"]))
-        vel = np.column_stack((data["vx"], data["vy"], data["vz"]))
+    for track_name in tracks:
+        df_track = df_all[df_all.track == track_name].sort_values(by="t")  # type: ignore[attr-defined]
+        if len(df_track) < 10:
+            continue
+
+        acc = np.column_stack((df_track.ax.values, df_track.ay.values, df_track.az.values))
+        vel = np.column_stack((df_track.vx.values, df_track.vy.values, df_track.vz.values))
+        t = df_track.t.values
 
         # Calculate aerodynamic forces
         F_aero, speed = calculate_net_aerodynamic_force(acc, vel, MASS)
@@ -617,8 +633,8 @@ def plot_rotational_correction_scan(tracks_data, v_rot_range=np.linspace(0, 5, 2
         for v_rot in v_rot_range:
             coeffs = calculate_effective_coefficients(F_components, speed, v_rot)
             v_rot_values.append(v_rot)
-            c_n_variances.append(np.var(coeffs["C_n_eff"]))
-            c_t_variances.append(np.var(coeffs["C_t_eff"]))
+            c_n_variances.append(np.nanvar(coeffs["C_n_eff"]))
+            c_t_variances.append(np.nanvar(coeffs["C_t_eff"]))
 
         # Find optimal v_rot
         total_variances = np.array(c_n_variances) + np.array(c_t_variances)
@@ -655,14 +671,14 @@ def plot_rotational_correction_scan(tracks_data, v_rot_range=np.linspace(0, 5, 2
             F_components, speed, optimal_v_rot
         )
         axes[1, 1].plot(
-            data["t"],
+            t,
             coeffs_optimal["C_n_eff"],
             "-",
             alpha=0.7,
             label=f"{track_name} C_n (v_rot={optimal_v_rot:.2f})",
         )
         axes[1, 1].plot(
-            data["t"],
+            t,
             coeffs_optimal["C_t_eff"],
             "--",
             alpha=0.7,
@@ -707,6 +723,8 @@ def main():
 
     # Prepare data for all tracks
     tracks_data = {}
+    perp_data = {}
+    heading_rate_data = {}
     energy_data = {}
 
     print(f"Analyzing {len(tracks)} tracks...")
@@ -720,16 +738,36 @@ def main():
         track_result = analyze_track(df_track, track)
         tracks_data[track] = track_result
 
-        # Calculate energy for energy conservation validation
-        t, total_energy, kinetic_energy, potential_energy = (
-            calculate_energy_from_dataframe(df_track)
+        # Build compact views for specific validation plots (avoid tuple index confusion)
+        (
+            t,
+            v_xy_sq,
+            f_z_aero,
+            v_total_sq,
+            a_drag_est,
+            a_perp_h,
+            power_per_mass,
+            v_h,
+            a_perp_h_signed,
+            a_perp_h_curv,
+            a_perp_h_curv_signed,
+            v_h_xy,
+            heading_deg,
+            heading_rate_deg,
+            heading_rate_from_cross_deg,
+            heading_rate_xy_deg,
+        ) = track_result
+        perp_data[track] = (t, a_perp_h, v_h, a_perp_h_curv)
+        heading_rate_data[track] = (
+            t,
+            v_h,
+            heading_rate_deg,
+            heading_rate_from_cross_deg,
+            heading_rate_xy_deg,
         )
-        energy_data[track] = {
-            "t": t,
-            "total_energy": total_energy,
-            "kinetic_energy": kinetic_energy,
-            "potential_energy": potential_energy,
-        }
+
+        # Calculate energy for energy conservation validation
+        energy_data[track] = calculate_energy_from_dataframe(df_track)
 
     # Print energy conservation analysis
     print("\n=== Energy Conservation Analysis ===")
@@ -747,11 +785,11 @@ def main():
 
     # Plot 1: Aerodynamic Forces Analysis (NEW)
     print("\n1. Aerodynamic Forces Analysis")
-    plot_aerodynamic_forces_analysis(tracks_data)
+    plot_aerodynamic_forces_analysis(df_all, tracks)
 
     # Plot 2: Rotational Correction Scan (NEW)
     print("\n2. Rotational Correction Scan")
-    plot_rotational_correction_scan(tracks_data)
+    plot_rotational_correction_scan(df_all, tracks)
 
     # Plot 3: Vertical Aero Force vs Horizontal Speed Squared
     print("\n3. Vertical Aero Force vs Horizontal Speed Squared")
@@ -795,7 +833,7 @@ def main():
 
     # Plot 13: Perpendicular Acceleration vs Time
     print("\n13. Perpendicular Acceleration vs Time")
-    plot_perpendicular_acceleration_vs_time(tracks_data)
+    plot_perpendicular_acceleration_vs_time(perp_data)
 
     # Plot 14: Power vs Time
     print("\n14. Power vs Time")
@@ -803,7 +841,7 @@ def main():
 
     # Plot 15: Heading-rate consistency check (first few tracks)
     print("\n15. Heading-rate consistency (validation)")
-    plot_heading_rate_consistency(tracks_data, df_all, max_tracks=4)
+    plot_heading_rate_consistency(heading_rate_data, df_all, max_tracks=4)
 
     print("\n=== Analysis Complete ===")
 

@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "boomerang"
+version = "0.1.0"
+description = "Boomerang Physics Verify."
+authors = ["SituChengxiang <kuan896048176@outlook.com>"]
+
+[project]
+name = "boomerang"
+version = "0.1.0"
+description = "A Python project."
+authors = ["SituChengxiang <kuan896048176@outlook.com>"]
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+# dev = ["pytest", "black", "flake8"]
+
+# [tool.setuptools]  # 可根据需要添加setuptools相关配置

@@ -353,35 +353,15 @@ def get_smoother_config() -> dict:
 
 ### 2. 可视化层
 
-#### 原有过程式可视化 (`src/visualization/VisualizeData.py`)
-- [x] 16种不同的可ualization_suite()
-composite.generate_all_plots(track_data, "output/")
+#### 当前主入口（推荐）
+- [x] `src/cmd/quickViz.py`：快速验证与配图统一入口
+- [x] 自动匹配 `raw/SMR/opt` 数据
+- [x] 统一样式与柔和配色（`src/visualization/style.py`）
+- [x] 一次性生成并弹出多张验证图（可选保存）
 
-
-#### 新OOP可视化系统 (`src/visualization/oop_visualization.py`)
-
-##### 基础类
-- [x] `TrackDataWrapper`：数据容器与计算属性
-- [x] `VisualizationBase`：基类与通用功能
-
-##### 专业可视化器
-- [x] `TrajectoryVisualizer`：
-  - 3D轨迹比较
-  - 能量叠加可视化
-- [x] `TimeSeriesVisualizer`：
-  - 速度分量分析
-  - 能量分量分析
-- [x] `ForceAnalysisVisualizer`：
-  - 垂直气动力分析
-  - 空气动力学分解
-- [x] `CompositeVisualizer`：组合多种可视化
-
-##### 关键特性
-- [x] 统一样式管理
-- [x] 自动颜色映射
-- [x] 多轨迹支持
-- [x] 图表保存功能
-- [x] 组合可视化生成
+#### 兼容保留入口（历史）
+- [x] `src/cmd/plotAll.py`：兼容旧流程，内部依赖 OOP 可视化组件
+- [x] `src/visualization/oopVisualization.py`：历史 OOP 可视化实现（逐步收敛中）
 
 ### 3. 拟合与优化层
 

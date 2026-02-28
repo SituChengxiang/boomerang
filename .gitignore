@@ -6,6 +6,7 @@
 # Datasource local storage ignored files
 /dataSources/
 /data/interm/*SMR.csv
+/data/interm/*coeffs.csv
 /data/final/
 /dataSources.local.xml
 /target/
@@ -20,3 +21,4 @@
 *.png
 /*/.directory
 /src/*/Cargo.lock
+/docs/结题报告.md

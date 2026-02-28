@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils.aerodynamics import (
+    calculate_classic_coefficients,
     calculate_effective_coefficients,
     calculate_net_aerodynamic_force,
     decompose_aerodynamic_force,
@@ -71,17 +72,6 @@ def solve_coefficients(file_path):
     F_n = F_components["F_n"]  # Normal component (horizontal)
     F_z = F_components["F_z"]  # Vertical component
 
-    # Calculate lift magnitude (perpendicular to velocity)
-    eps_v = 1e-6
-    v_hat = v_vec / (speed_calculated[:, np.newaxis] + eps_v)
-    F_lift_vec = F_aero - f_parallel[:, np.newaxis] * v_hat
-    L_mag = np.linalg.norm(F_lift_vec, axis=1)
-
-    # Drag magnitude is the *opposing* (negative) parallel component
-    D_mag_signed = -f_parallel
-    D_mag = np.maximum(D_mag_signed, 0.0)
-    thrust_mag = np.maximum(f_parallel, 0.0)
-
     # 5. Calculate Coefficients with Rotational Correction
     # Omega Model: w(t) = w0 - k*t
     omega = np.maximum(OMEGA0 - OMEGA_DECAY * t, 0)
@@ -95,14 +85,21 @@ def solve_coefficients(file_path):
     # Note: these are *not* the same as the traditional Cl/Cd derived from |F_perp| and drag.
     coeffs = calculate_effective_coefficients(F_components, speed_calculated, v_rot)
 
-    # Classic Cl/Cd reconstruction (inverse-solve style) with epsilon-only protection.
-    eps_q = 1e-6
-    q_safe = dynamic_pressure + eps_q
-    Cl = L_mag / q_safe
-    Cd_signed = D_mag_signed / q_safe
-    Cd = np.full_like(D_mag, np.nan, dtype=float)
-    cd_ok = f_parallel <= 0.0
-    Cd[cd_ok] = D_mag[cd_ok] / q_safe[cd_ok]
+    # Classic Cl/Cd reconstruction (shared implementation).
+    coeffs_classic = calculate_classic_coefficients(
+        f_aero=F_aero,
+        f_components=F_components,
+        speed=speed_calculated,
+        v_rot=v_rot,
+        eps_q=1e-6,
+    )
+    Cl = coeffs_classic["Cl"]
+    Cd = coeffs_classic["Cd"]
+    Cd_signed = coeffs_classic["Cd_signed"]
+    L_mag = coeffs_classic["L_mag"]
+    D_mag = coeffs_classic["D_mag"]
+    thrust_mag = coeffs_classic["thrust_mag"]
+    D_mag_signed = -f_parallel
 
     # Store results (including new components)
     results = pd.DataFrame(
@@ -238,9 +235,9 @@ if __name__ == "__main__":
             continue
 
         # Calculate Statistics for Cl and Cd (filtering out extremes)
-        mask = (res["speed"] > 1.0) & np.isfinite(res["Cd"])
+        mask = (res["speed"] > 0.02) & np.isfinite(res["Cd"])
         stats = res[mask][["Cl", "Cd", "Cd_signed"]].describe()  # type: ignore
-        print(f"\n--- {file_path.name} Statistics (Speed > 1.0 m/s) ---")
+        print(f"\n--- {file_path.name} Statistics (Speed > 0.02 m/s) ---")
         print(stats)
 
         # Export result to CSV (data/interm)

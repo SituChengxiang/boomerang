@@ -244,6 +244,77 @@ def magnitude(vec_array: np.ndarray, axis: int = -1) -> np.ndarray:
     return np.linalg.norm(vec_array, axis=axis)
 
 
+def linear_fit_with_ci(
+    x: np.ndarray,
+    y: np.ndarray,
+    alpha: float = 0.05,
+) -> dict[str, float] | None:
+    """Fit y = kx + b and return parameter CIs.
+
+    Args:
+        x: Independent variable samples
+        y: Dependent variable samples
+        alpha: Significance level (default 0.05 for 95% CI)
+
+    Returns:
+        Dict with slope/intercept, standard errors, CI bounds, R², n, dof;
+        returns None if there are not enough valid samples.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(y)
+    x = x[mask]
+    y = y[mask]
+
+    n = int(x.size)
+    if n < 3:
+        return None
+
+    design = np.column_stack((x, np.ones_like(x)))
+    beta, _, _, _ = np.linalg.lstsq(design, y, rcond=None)
+    k = float(beta[0])
+    b = float(beta[1])
+
+    y_hat = k * x + b
+    resid = y - y_hat
+    dof = n - 2
+    if dof <= 0:
+        return None
+
+    ss_res = float(np.sum(resid**2))
+    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+    r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else float("nan")
+
+    s2 = ss_res / dof
+    cov = s2 * np.linalg.inv(design.T @ design)
+    se_k = float(np.sqrt(cov[0, 0]))
+    se_b = float(np.sqrt(cov[1, 1]))
+
+    try:
+        from scipy.stats import t as student_t  # lazy import
+
+        t_crit = float(student_t.ppf(1.0 - alpha / 2.0, dof))
+    except Exception:
+        t_crit = 1.96
+
+    k_lo, k_hi = k - t_crit * se_k, k + t_crit * se_k
+    b_lo, b_hi = b - t_crit * se_b, b + t_crit * se_b
+
+    return {
+        "n": float(n),
+        "dof": float(dof),
+        "k": k,
+        "b": b,
+        "se_k": se_k,
+        "se_b": se_b,
+        "k_lo": float(k_lo),
+        "k_hi": float(k_hi),
+        "b_lo": float(b_lo),
+        "b_hi": float(b_hi),
+        "r2": r2,
+    }
+
+
 def local_initial_derivative(
     t: np.ndarray, x: np.ndarray, n_points: int = 7, poly_deg: int = 2
 ) -> float:

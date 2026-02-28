@@ -100,6 +100,42 @@ def analyze_track(df: pd.DataFrame, track_name: str = "") -> tuple:
     )
 
 
+def compute_centripetal_force_demands(
+    analysis_result: tuple,
+    mass: float,
+) -> dict[str, np.ndarray]:
+    """Build centripetal-force demand series from analyze_track output.
+
+    Returns three force-demand series in horizontal plane:
+    - vector: from cross-product acceleration
+    - heading: from heading-rate acceleration
+    - curvature: from curvature-based acceleration
+    """
+    v_h = np.asarray(analysis_result[7], dtype=float)
+    a_perp_vec_signed = np.asarray(analysis_result[8], dtype=float)
+
+    if analysis_result[10] is None:
+        a_perp_curv_signed = np.full_like(v_h, np.nan)
+    else:
+        a_perp_curv_signed = np.asarray(analysis_result[10], dtype=float)
+
+    heading_rate_deg = analysis_result[13]
+    if heading_rate_deg is None:
+        heading_rate_deg = analysis_result[14]
+
+    if heading_rate_deg is None:
+        a_perp_heading_signed = np.full_like(v_h, np.nan)
+    else:
+        psi_dot = np.deg2rad(np.asarray(heading_rate_deg, dtype=float))
+        a_perp_heading_signed = v_h * psi_dot
+
+    return {
+        "vector": float(mass) * a_perp_vec_signed,
+        "heading": float(mass) * a_perp_heading_signed,
+        "curvature": float(mass) * a_perp_curv_signed,
+    }
+
+
 def calculate_velocity_from_position(
     x: np.ndarray, y: np.ndarray, z: np.ndarray, t: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

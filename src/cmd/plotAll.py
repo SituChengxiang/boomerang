@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""快速验证低速强回旋机制：F_n/C*_eff vs speed（OOP版入口）
+"""快速验证低速强回旋机制：F_n/C*_eff vs speed（旧入口）。
+
+说明：
+- 该脚本仍可用，但建议优先使用 `src/cmd/quickViz.py` 作为统一快速验证入口。
 
 用法示例：
   python3 src/cmd/plotAll.py data/final/track1opt.csv
@@ -74,6 +77,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    print("[plotAll] 提示：该入口为兼容保留，推荐改用 src/cmd/quickViz.py")
     args = _parse_args()
     out_dir = Path(args.out)
     if args.save:
@@ -131,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-    # ...existing code...

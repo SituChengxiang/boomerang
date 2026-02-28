@@ -127,6 +127,52 @@ def calculate_effective_coefficients(
     return {"C_n_eff": C_n_eff, "C_z_eff": C_z_eff, "C_t_eff": C_t_eff, "q": q}
 
 
+def calculate_classic_coefficients(
+    f_aero: np.ndarray,
+    f_components: Dict[str, np.ndarray],
+    speed: np.ndarray,
+    v_rot: float | np.ndarray = 0.0,
+    eps_q: float = 1e-6,
+) -> Dict[str, np.ndarray]:
+    """Calculate classic aerodynamic coefficients (Cl, Cd) from force decomposition.
+
+    Definitions (aligned with inverseSolve):
+    - Cl = |F_perp| / q_safe
+    - Cd_signed = (-F_t) / q_safe
+    - Cd = Cd_signed when F_t <= 0 else NaN
+
+    where q_safe = 0.5*rho*S*(v^2 + v_rot^2) + eps_q.
+    """
+    coeffs_eff = calculate_effective_coefficients(f_components, speed, v_rot)
+    q = np.asarray(coeffs_eff["q"], dtype=float)
+    q_safe = q + float(eps_q)
+
+    f_t = np.asarray(f_components["F_t"], dtype=float)
+    t_hat = np.asarray(f_components["t_hat"], dtype=float)
+
+    f_lift_vec = f_aero - f_t[:, np.newaxis] * t_hat
+    l_mag = np.linalg.norm(f_lift_vec, axis=1)
+
+    cl = l_mag / q_safe
+    cd_signed = (-f_t) / q_safe
+    cd = np.full_like(speed, np.nan, dtype=float)
+    drag_mask = f_t <= 0.0
+    cd[drag_mask] = cd_signed[drag_mask]
+
+    d_mag = np.maximum(-f_t, 0.0)
+    thrust_mag = np.maximum(f_t, 0.0)
+
+    return {
+        "Cl": cl,
+        "Cd": cd,
+        "Cd_signed": cd_signed,
+        "L_mag": l_mag,
+        "D_mag": d_mag,
+        "thrust_mag": thrust_mag,
+        "q": q,
+    }
+
+
 def find_optimal_v_rot(
     F_components: Dict[str, np.ndarray],
     speed: np.ndarray,
@@ -324,13 +370,15 @@ def calculate_aerodynamic_coefficients_from_data(
 
     # Calculate coefficients
     coeffs = calculate_effective_coefficients(f_components, speed, v_rot)
+    coeffs_classic = calculate_classic_coefficients(f_aero, f_components, speed, v_rot)
 
     return {
-        "Cl": coeffs["C_n_eff"],  # Normal coefficient as lift coefficient
-        "Cd": coeffs["C_t_eff"],  # Tangential coefficient as drag coefficient
+        "Cl": coeffs_classic["Cl"],
+        "Cd": coeffs_classic["Cd"],
+        "Cd_signed": coeffs_classic["Cd_signed"],
         "Cz": coeffs["C_z_eff"],  # Vertical coefficient
         "q": coeffs["q"],  # Dynamic pressure
-        "F_lift": f_components["F_n"],  # Lift force magnitude
-        "F_drag": f_components["F_t"],  # Drag force magnitude
+        "F_lift": coeffs_classic["L_mag"],
+        "F_drag": coeffs_classic["D_mag"],
         "F_vertical": f_components["F_z"],  # Vertical force
     }
